@@ -1,4 +1,4 @@
-use bevy::math::Vec3;
+use bevy::math::{Mat3, Vec3, Vec4Swizzles};
 use bevy::render::mesh::{Indices, Mesh, PrimitiveTopology, VertexAttributeValues};
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::transform::components::Transform;
@@ -55,21 +55,21 @@ pub fn combine_meshes<'a>(
                 // unless you really know what you are doing.
                 // http://www.mikktspace.com/
 
-                // let inverse_transpose_model = matrix.inverse().transpose();
-                // let inverse_transpose_model = Mat3 {
-                //     x_axis: inverse_transpose_model.x_axis.xyz(),
-                //     y_axis: inverse_transpose_model.y_axis.xyz(),
-                //     z_axis: inverse_transpose_model.z_axis.xyz(),
-                // };
+                let inverse_transpose_model = matrix.inverse().transpose();
+                let inverse_transpose_model = Mat3 {
+                    x_axis: inverse_transpose_model.x_axis.xyz(),
+                    y_axis: inverse_transpose_model.y_axis.xyz(),
+                    z_axis: inverse_transpose_model.z_axis.xyz(),
+                };
 
                 if let Some(VertexAttributeValues::Float32x3(vert_normals)) = mesh.attribute(Mesh::ATTRIBUTE_NORMAL) {
                     for norm in vert_normals {
-                        normals.push(*norm);
-                        //     inverse_transpose_model
-                        //         .mul_vec3(Vec3::from(*norm))
-                        //         .normalize_or_zero()
-                        //         .into(),
-                        // );
+                        normals.push(
+                            inverse_transpose_model
+                                .mul_vec3(Vec3::from(*norm))
+                                .normalize_or_zero()
+                                .into(),
+                        );
                     }
                 }
             }
