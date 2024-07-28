@@ -1,8 +1,10 @@
 use bevy::app::{App, Plugin, Startup};
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, SystemInformationDiagnosticsPlugin};
 use bevy::ecs::system::Commands;
-use iyes_perf_ui::diagnostics::{PerfUiEntryFPS, PerfUiEntryFPSWorst, PerfUiEntryFrameTime, PerfUiEntryFrameTimeWorst};
-use iyes_perf_ui::{PerfUiPlugin, PerfUiRoot};
+use iyes_perf_ui::prelude::{
+    PerfUiEntryFPS, PerfUiEntryFPSWorst, PerfUiEntryFrameTime, PerfUiEntryFrameTimeWorst, PerfUiRoot,
+};
+use iyes_perf_ui::PerfUiPlugin;
 
 pub struct DiagnosticsPlugin;
 

@@ -11,5 +11,5 @@ opt-level = 1
 
 
 [dependencies]
-bevy = "0.13"
-iyes_perf_ui = "0.2"
+bevy = "0.14"
+iyes_perf_ui = "0.3"
