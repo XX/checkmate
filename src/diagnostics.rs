@@ -1,17 +1,17 @@
 use bevy::app::{App, Plugin, Startup};
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, SystemInformationDiagnosticsPlugin};
 use bevy::ecs::system::Commands;
+use iyes_perf_ui::PerfUiPlugin;
 use iyes_perf_ui::prelude::{
     PerfUiEntryFPS, PerfUiEntryFPSWorst, PerfUiEntryFrameTime, PerfUiEntryFrameTimeWorst, PerfUiRoot,
 };
-use iyes_perf_ui::PerfUiPlugin;
 
 pub struct DiagnosticsPlugin;
 
 impl Plugin for DiagnosticsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            FrameTimeDiagnosticsPlugin,
+            FrameTimeDiagnosticsPlugin::default(),
             SystemInformationDiagnosticsPlugin,
             PerfUiPlugin,
         ))

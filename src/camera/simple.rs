@@ -1,10 +1,10 @@
 use bevy::app::{App, Plugin, Startup, Update};
-use bevy::core_pipeline::core_3d::Camera3dBundle;
+use bevy::core_pipeline::core_3d::Camera3d;
 use bevy::ecs::component::Component;
 use bevy::ecs::event::EventReader;
 use bevy::ecs::system::{Commands, Query, Res};
-use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::input::ButtonInput;
+use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::math::{EulerRot, Quat, Vec3};
 use bevy::prelude::default;
 use bevy::render::camera::Camera;
@@ -37,11 +37,12 @@ impl Default for SimpleCamera {
 pub fn spawn(mut commands: Commands) {
     let translation = Vec3::new(0.7, 20.0, 40.0);
 
-    commands.spawn((SimpleCamera::default(), Camera3dBundle {
-        camera: Camera { hdr: true, ..default() },
-        transform: Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    }));
+    commands.spawn((
+        SimpleCamera::default(),
+        Camera3d::default(),
+        Camera { hdr: true, ..default() },
+        Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
 }
 
 pub fn update_input(
@@ -57,7 +58,7 @@ pub fn update_input(
         }
         if buttons.pressed(MouseButton::Left) {
             for mouse in mouse_motion.read() {
-                let delta = mouse.delta * time.delta_seconds() * 0.1;
+                let delta = mouse.delta * time.delta_secs() * 0.1;
                 controller.rotation *= Quat::from_euler(EulerRot::XYZ, -delta.y, -delta.x, 0.0);
             }
         }

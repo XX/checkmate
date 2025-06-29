@@ -1,28 +1,31 @@
 use std::f32::consts::{FRAC_PI_4, PI};
 
-use bevy::animation::{animate_targets, AnimationClip, AnimationPlayer};
+use bevy::animation::graph::{AnimationGraphHandle, AnimationNodeType};
+use bevy::animation::{AnimationClip, AnimationPlayer, animate_targets};
 use bevy::app::{App, Startup, Update};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::{Color, ColorToComponents, LinearRgba};
 use bevy::ecs::component::Component;
 use bevy::ecs::query::{Added, With};
-use bevy::ecs::system::{Commands, Local, Query, Res, ResMut, Resource};
+use bevy::ecs::resource::Resource;
+use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::ecs::system::{Commands, Local, Query, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
-use bevy::input::keyboard::KeyCode;
 use bevy::input::ButtonInput;
+use bevy::input::keyboard::KeyCode;
 use bevy::math::primitives::Plane3d;
 use bevy::math::{EulerRot, Quat, Vec3};
 use bevy::pbr::{
-    AmbientLight, DirectionalLight, DirectionalLightBundle, DirectionalLightShadowMap, PbrBundle, StandardMaterial,
+    AmbientLight, DirectionalLight, DirectionalLightShadowMap, MeshMaterial3d, StandardMaterial, light_consts,
 };
-use bevy::prelude::{default, AnimationGraph, AnimationNodeIndex, Entity, IntoSystemConfigs, MeshBuilder};
+use bevy::prelude::{AnimationGraph, AnimationNodeIndex, Entity, MeshBuilder, default};
 use bevy::reflect::Reflect;
 use bevy::render::camera::ClearColor;
-use bevy::render::mesh::{Mesh, Meshable};
-use bevy::scene::SceneBundle;
+use bevy::render::mesh::{Mesh, Mesh3d, Meshable};
+use bevy::scene::SceneRoot;
 use bevy::transform::components::Transform;
 use bevy::window::Window;
-use bevy::{log, DefaultPlugins};
+use bevy::{DefaultPlugins, log};
 use camera::panorbit::PanOrbitCameraPlugin;
 use diagnostics::DiagnosticsPlugin;
 use utils::combine_meshes;
@@ -60,7 +63,8 @@ fn main() {
     App::new()
         .insert_resource(AmbientLight {
             color: Color::WHITE,
-            brightness: 1.0 / 5.0f32,
+            brightness: 100.,
+            affects_lightmapped_meshes: true,
         })
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
         .add_plugins(DefaultPlugins)
@@ -83,14 +87,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut graphs: Res
     });
     commands.insert_resource(ClearColor(Color::srgb(0.7, 0.92, 0.96)));
 
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn((
+        DirectionalLight {
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_translation(Vec3::new(2.0, 0.5, 5.0)).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+        Transform::from_translation(Vec3::new(2.0, 0.5, 5.0)).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
 
     // Build the animation graph
     let mut graph = AnimationGraph::new();
@@ -116,10 +119,16 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut graphs: Res
             target_pos: Vec3::ZERO,
             timer: 0.0,
         },
-        SceneBundle {
-            scene: asset_server.load("su-75_anim/su-75.gltf#Scene0"),
-            ..default()
+        SceneRoot(asset_server.load("su-75_anim/su-75.gltf#Scene0")),
+    ));
+
+    commands.spawn((
+        PlaneMovement {
+            target_pos: Vec3::ZERO,
+            timer: 0.0,
         },
+        SceneRoot(asset_server.load("su-75_anim/su-75.gltf#Scene0")),
+        Transform::from_xyz(-10.0, 0.0, 0.0),
     ));
 }
 
@@ -151,11 +160,7 @@ fn chessboard_land_spawn(
     }
 
     let mesh = meshes.add(combine_meshes(&mesh_data, true, false, false, true));
-    commands.spawn(PbrBundle {
-        mesh,
-        material: materials.add(Color::WHITE),
-        ..default()
-    });
+    commands.spawn((Mesh3d(mesh), MeshMaterial3d(materials.add(Color::WHITE))));
 }
 
 /// Attaches the animation graph to the scene
@@ -166,7 +171,9 @@ fn attach_animations(
 ) {
     for (entity, _player) in &to_animated_entities {
         log::info!("Attaching animations");
-        commands.entity(entity).insert(animations.graph.clone());
+        commands
+            .entity(entity)
+            .insert(AnimationGraphHandle(animations.graph.clone()));
     }
 }
 
@@ -186,11 +193,14 @@ fn control_land_gear_animation(
         for (node_index, mut player) in [animations.animations[0]].into_iter().zip(&mut animation_players) {
             let animation_node = &animation_graph[node_index];
             let animation_start_time = if *reverse {
-                animation_node
-                    .clip
-                    .as_ref()
-                    .and_then(|clip_handle| animation_clips.get(clip_handle).map(|clip| clip.duration()))
-                    .unwrap_or_default()
+                if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
+                    animation_clips
+                        .get(clip_handle)
+                        .map(|clip| clip.duration())
+                        .unwrap_or_default()
+                } else {
+                    0.0
+                }
             } else {
                 0.0
             };

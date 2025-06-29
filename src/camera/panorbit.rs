@@ -1,12 +1,12 @@
 use bevy::app::{App, Plugin, Startup, Update};
-use bevy::core_pipeline::bloom::BloomSettings;
-use bevy::core_pipeline::core_3d::Camera3dBundle;
+use bevy::core_pipeline::bloom::Bloom;
+use bevy::core_pipeline::core_3d::Camera3d;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::component::Component;
 use bevy::ecs::event::EventReader;
 use bevy::ecs::system::{Commands, Query, Res};
-use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::input::ButtonInput;
+use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::math::{Mat3, Quat, Vec2, Vec3};
 use bevy::prelude::default;
 use bevy::render::camera::{Camera, PerspectiveProjection, Projection};
@@ -49,18 +49,15 @@ pub fn spawn(mut commands: Commands) {
 
     commands.spawn((
         PanOrbitCamera { radius, ..default() },
-        Camera3dBundle {
-            camera: Camera { hdr: true, ..default() },
-            tonemapping: Tonemapping::BlenderFilmic,
-            projection: PerspectiveProjection {
-                fov: 45.0_f32.to_radians(),
-                ..default()
-            }
-            .into(),
-            transform: Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y),
+        Camera3d::default(),
+        Camera { hdr: true, ..default() },
+        Tonemapping::BlenderFilmic,
+        Projection::Perspective(PerspectiveProjection {
+            fov: 45.0_f32.to_radians(),
             ..default()
-        },
-        BloomSettings::NATURAL,
+        }),
+        Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y),
+        Bloom::NATURAL,
     ));
 }
 
@@ -72,7 +69,7 @@ pub fn update_input(
     input_mouse: Res<ButtonInput<MouseButton>>,
     mut query: Query<(&mut PanOrbitCamera, &mut Transform, &Projection)>,
 ) {
-    let primary_window = windows.single();
+    let primary_window = windows.single().expect("Window must be single");
 
     for (mut camera, mut transform, projection) in query.iter_mut() {
         let mut pan = Vec2::ZERO;
@@ -111,11 +108,7 @@ pub fn update_input(
             let window = get_window_size(primary_window);
             let delta_x = {
                 let delta = rotation_move.x / window.x * std::f32::consts::PI * 2.0;
-                if camera.upside_down {
-                    -delta
-                } else {
-                    delta
-                }
+                if camera.upside_down { -delta } else { delta }
             };
             let delta_y = rotation_move.y / window.y * std::f32::consts::PI;
             let yaw = Quat::from_rotation_y(-delta_x);
