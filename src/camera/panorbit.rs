@@ -4,12 +4,14 @@ use bevy::core_pipeline::core_3d::Camera3d;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::component::Component;
 use bevy::ecs::event::EventReader;
+use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::system::{Commands, Query, Res};
 use bevy::input::ButtonInput;
 use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::math::{Mat3, Quat, Vec2, Vec3};
 use bevy::prelude::default;
 use bevy::render::camera::{Camera, PerspectiveProjection, Projection};
+use bevy::time::Time;
 use bevy::transform::components::Transform;
 use bevy::window::Window;
 
@@ -17,7 +19,25 @@ pub struct PanOrbitCameraPlugin;
 
 impl Plugin for PanOrbitCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn).add_systems(Update, update_input);
+        app.add_systems(Startup, spawn)
+            .add_systems(Update, (update_input, interpolate_camera).chain());
+    }
+}
+
+#[derive(Component)]
+pub struct PanOrbitCameraTarget {
+    pub focus: Vec3,
+    pub radius: f32,
+    pub rotation: Quat,
+}
+
+impl Default for PanOrbitCameraTarget {
+    fn default() -> Self {
+        PanOrbitCameraTarget {
+            focus: Vec3::ZERO,
+            radius: 5.0,
+            rotation: Quat::IDENTITY,
+        }
     }
 }
 
@@ -29,26 +49,39 @@ pub struct PanOrbitCamera {
     pub upside_down: bool,
     pub orbit_button: MouseButton,
     pub pan_button: MouseButton,
+    pub smoothness_speed: f32,
 }
 
 impl Default for PanOrbitCamera {
     fn default() -> Self {
-        PanOrbitCamera {
+        Self {
             focus: Vec3::ZERO,
             radius: 5.0,
             upside_down: false,
             orbit_button: MouseButton::Left,
             pan_button: MouseButton::Right,
+            smoothness_speed: 8.0,
         }
     }
 }
 
 pub fn spawn(mut commands: Commands) {
+    // Initial parameters
     let translation = Vec3::new(-3.0, 5.0, 15.0);
     let radius = translation.length();
+    let transform = Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y);
 
     commands.spawn((
-        PanOrbitCamera { radius, ..default() },
+        PanOrbitCamera {
+            radius,
+            focus: Vec3::ZERO,
+            ..default()
+        },
+        PanOrbitCameraTarget {
+            focus: Vec3::ZERO,
+            radius,
+            rotation: transform.rotation,
+        },
         Camera3d::default(),
         Camera { hdr: true, ..default() },
         Tonemapping::BlenderFilmic,
@@ -56,7 +89,7 @@ pub fn spawn(mut commands: Commands) {
             fov: 45.0_f32.to_radians(),
             ..default()
         }),
-        Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y),
+        transform,
         Bloom::NATURAL,
     ));
 }
@@ -67,11 +100,11 @@ pub fn update_input(
     mut motion_events: EventReader<MouseMotion>,
     mut scroll_events: EventReader<MouseWheel>,
     input_mouse: Res<ButtonInput<MouseButton>>,
-    mut query: Query<(&mut PanOrbitCamera, &mut Transform, &Projection)>,
+    mut query: Query<(&mut PanOrbitCamera, &mut PanOrbitCameraTarget, &Transform, &Projection)>,
 ) {
     let primary_window = windows.single().expect("Window must be single");
 
-    for (mut camera, mut transform, projection) in query.iter_mut() {
+    for (mut camera, mut target, transform, projection) in query.iter_mut() {
         let mut pan = Vec2::ZERO;
         let mut rotation_move = Vec2::ZERO;
         let mut scroll = 0.0;
@@ -102,9 +135,7 @@ pub fn update_input(
             camera.upside_down = up.y <= 0.0;
         }
 
-        let mut any = false;
         if rotation_move.length_squared() > 0.0 {
-            any = true;
             let window = get_window_size(primary_window);
             let delta_x = {
                 let delta = rotation_move.x / window.x * std::f32::consts::PI * 2.0;
@@ -113,40 +144,53 @@ pub fn update_input(
             let delta_y = rotation_move.y / window.y * std::f32::consts::PI;
             let yaw = Quat::from_rotation_y(-delta_x);
             let pitch = Quat::from_rotation_x(-delta_y);
-            transform.rotation = yaw * transform.rotation; // rotate around global y axis
-            transform.rotation = transform.rotation * pitch; // rotate around local x axis
+
+            target.rotation = yaw * target.rotation; // rotate around global y axis
+            target.rotation = target.rotation * pitch; // rotate around local x axis
         } else if pan.length_squared() > 0.0 {
-            any = true;
             // make panning distance independent of resolution and FOV,
             let window = get_window_size(primary_window);
             if let Projection::Perspective(projection) = projection {
                 pan *= Vec2::new(projection.fov * projection.aspect_ratio, projection.fov) / window;
             }
+
             // translate by local axes
             let right = transform.rotation * Vec3::X * -pan.x;
             let up = transform.rotation * Vec3::Y * pan.y;
             // make panning proportional to distance away from focus point
             let translation = (right + up) * camera.radius;
-            camera.focus += translation;
-        } else if scroll.abs() > 0.0 {
-            any = true;
-            camera.radius -= scroll * camera.radius * 0.2;
-            // dont allow zoom to reach zero or you get stuck
-            camera.radius = f32::max(camera.radius, 0.05);
-        }
 
-        if any {
-            // emulating parent/child to make the yaw/y-axis rotation behave like a turntable
-            // parent = x and y rotation
-            // child = z-offset
-            let rot_matrix = Mat3::from_quat(transform.rotation);
-            transform.translation = camera.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, camera.radius));
+            target.focus += translation;
+        } else if scroll.abs() > 0.0 {
+            target.radius -= scroll * target.radius * 0.2;
+            // dont allow zoom to reach zero or you get stuck
+            target.radius = target.radius.max(0.05);
         }
     }
 
     // consume any remaining events, so they don't pile up if we don't need them
     // (and also to avoid Bevy warning us about not checking events every frame update)
     motion_events.clear();
+}
+
+pub fn interpolate_camera(
+    time: Res<Time>,
+    mut query: Query<(&mut PanOrbitCamera, &PanOrbitCameraTarget, &mut Transform)>,
+) {
+    for (mut camera, target, mut transform) in query.iter_mut() {
+        let lerp_factor = 1.0 - (-camera.smoothness_speed * time.delta_secs()).exp();
+
+        // Update camera params
+        camera.focus = camera.focus.lerp(target.focus, lerp_factor);
+        camera.radius += (target.radius - camera.radius) * lerp_factor;
+
+        // Interpolate rotation
+        transform.rotation = transform.rotation.slerp(target.rotation, lerp_factor);
+
+        // Update camera position
+        let rot_matrix = Mat3::from_quat(transform.rotation);
+        transform.translation = camera.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, camera.radius));
+    }
 }
 
 fn get_window_size(window: &Window) -> Vec2 {

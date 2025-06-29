@@ -121,15 +121,6 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut graphs: Res
         },
         SceneRoot(asset_server.load("su-75_anim/su-75.gltf#Scene0")),
     ));
-
-    commands.spawn((
-        PlaneMovement {
-            target_pos: Vec3::ZERO,
-            timer: 0.0,
-        },
-        SceneRoot(asset_server.load("su-75_anim/su-75.gltf#Scene0")),
-        Transform::from_xyz(-10.0, 0.0, 0.0),
-    ));
 }
 
 fn chessboard_land_spawn(
