@@ -1,30 +1,15 @@
-use bevy::app::{App, Plugin, Startup, Update};
-use bevy::core_pipeline::bloom::Bloom;
-use bevy::core_pipeline::core_3d::Camera3d;
-use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::component::Component;
 use bevy::ecs::event::EventReader;
-use bevy::ecs::schedule::IntoScheduleConfigs;
-use bevy::ecs::system::{Commands, Query, Res};
+use bevy::ecs::system::{Query, Res};
 use bevy::input::ButtonInput;
 use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::math::{Mat3, Quat, Vec2, Vec3};
-use bevy::prelude::default;
-use bevy::render::camera::{Camera, PerspectiveProjection, Projection};
+use bevy::render::camera::Projection;
 use bevy::time::Time;
 use bevy::transform::components::Transform;
 use bevy::window::Window;
 
-pub struct PanOrbitCameraPlugin;
-
-impl Plugin for PanOrbitCameraPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn)
-            .add_systems(Update, (update_input, interpolate_camera).chain());
-    }
-}
-
-#[derive(Component)]
+#[derive(Component, Copy, Clone, Debug)]
 pub struct PanOrbitCameraTarget {
     pub focus: Vec3,
     pub radius: f32,
@@ -41,7 +26,7 @@ impl Default for PanOrbitCameraTarget {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Debug)]
 pub struct PanOrbitCamera {
     /// The "focus point" to orbit around. It is automatically updated when panning the camera
     pub focus: Vec3,
@@ -63,35 +48,6 @@ impl Default for PanOrbitCamera {
             smoothness_speed: 8.0,
         }
     }
-}
-
-pub fn spawn(mut commands: Commands) {
-    // Initial parameters
-    let translation = Vec3::new(-3.0, 5.0, 15.0);
-    let radius = translation.length();
-    let transform = Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y);
-
-    commands.spawn((
-        PanOrbitCamera {
-            radius,
-            focus: Vec3::ZERO,
-            ..default()
-        },
-        PanOrbitCameraTarget {
-            focus: Vec3::ZERO,
-            radius,
-            rotation: transform.rotation,
-        },
-        Camera3d::default(),
-        Camera { hdr: true, ..default() },
-        Tonemapping::BlenderFilmic,
-        Projection::Perspective(PerspectiveProjection {
-            fov: 45.0_f32.to_radians(),
-            ..default()
-        }),
-        transform,
-        Bloom::NATURAL,
-    ));
 }
 
 /// Pan the camera with middle mouse click, zoom with scroll wheel, orbit with right mouse click.

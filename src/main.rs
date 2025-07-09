@@ -1,10 +1,9 @@
-use std::f32::consts::{FRAC_PI_4, PI};
-
 use bevy::animation::graph::{AnimationGraphHandle, AnimationNodeType};
 use bevy::animation::{AnimationClip, AnimationPlayer, animate_targets};
 use bevy::app::{App, Startup, Update};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::{Color, ColorToComponents, LinearRgba};
+use bevy::core_pipeline::auto_exposure::AutoExposure;
 use bevy::ecs::component::Component;
 use bevy::ecs::query::{Added, With};
 use bevy::ecs::resource::Resource;
@@ -14,21 +13,24 @@ use bevy::gltf::GltfAssetLabel;
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::math::primitives::Plane3d;
-use bevy::math::{EulerRot, Quat, Vec3};
+use bevy::math::{Dir3, EulerRot, Quat, Vec3};
+use bevy::pbr::light_consts::lux;
 use bevy::pbr::{
-    AmbientLight, DirectionalLight, DirectionalLightShadowMap, MeshMaterial3d, StandardMaterial, light_consts,
+    AmbientLight, Atmosphere, AtmosphereSettings, DirectionalLight, DirectionalLightShadowMap, MeshMaterial3d,
+    StandardMaterial, light_consts,
 };
 use bevy::prelude::{AnimationGraph, AnimationNodeIndex, Entity, MeshBuilder, default};
 use bevy::reflect::Reflect;
-use bevy::render::camera::ClearColor;
+use bevy::render::camera::Exposure;
 use bevy::render::mesh::{Mesh, Mesh3d, Meshable};
 use bevy::scene::SceneRoot;
 use bevy::transform::components::Transform;
 use bevy::window::Window;
 use bevy::{DefaultPlugins, log};
-use camera::panorbit::PanOrbitCameraPlugin;
 use diagnostics::DiagnosticsPlugin;
 use utils::combine_meshes;
+
+use crate::camera::{AppCameraPlugin, LookingAt};
 
 mod camera;
 mod diagnostics;
@@ -59,17 +61,52 @@ struct Animations {
     graph: Handle<AnimationGraph>,
 }
 
+static USE_ATMOSPHERE: bool = false;
+static USE_AUTO_EXPOSURE: bool = false;
+
 fn main() {
+    let camera_plugin = AppCameraPlugin::default()
+        .with_smoothness_speed(8.0)
+        .with_custom_clear_color(Color::srgb(0.7, 0.92, 0.96))
+        .width_translate(Vec3::new(-3.0, 5.0, 15.0))
+        .width_look_at(LookingAt {
+            target: Vec3::ZERO.with_y(2.31),
+            up: Dir3::Y,
+        });
+
+    let camera_plugin = if USE_ATMOSPHERE {
+        camera_plugin.with_exposure(Exposure::SUNLIGHT).with_atmosphere(|| {
+            (Atmosphere::EARTH, AtmosphereSettings {
+                // aerial_view_lut_max_distance: 3.2e5,
+                scene_units_to_m: 1.0, //1e+4,
+                ..Default::default()
+            })
+        })
+    } else {
+        camera_plugin
+    };
+
+    let camera_plugin = if USE_AUTO_EXPOSURE {
+        camera_plugin.with_auto_exposure(|| AutoExposure {
+            range: -4.5..=14.0,
+            speed_brighten: 60.0,
+            speed_darken: 20.0,
+            ..Default::default()
+        })
+    } else {
+        camera_plugin
+    };
+
     App::new()
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 100.,
             affects_lightmapped_meshes: true,
         })
-        .insert_resource(DirectionalLightShadowMap { size: 4096 })
+        .insert_resource(DirectionalLightShadowMap { size: 2048 })
         .add_plugins(DefaultPlugins)
         .add_plugins(DiagnosticsPlugin)
-        .add_plugins(PanOrbitCameraPlugin)
+        .add_plugins(camera_plugin)
         .add_systems(Startup, (chessboard_land_spawn, setup))
         .add_systems(Update, attach_animations.before(animate_targets))
         .add_systems(Update, control_land_gear_animation)
@@ -85,14 +122,23 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut graphs: Res
         wobble_speed: 5.0,
         rotation_speed: 0.7,
     });
-    commands.insert_resource(ClearColor(Color::srgb(0.7, 0.92, 0.96)));
 
     commands.spawn((
         DirectionalLight {
             shadows_enabled: true,
+            // lux::RAW_SUNLIGHT is recommended for use with this feature, since
+            // other values approximate sunlight *post-scattering* in various
+            // conditions. RAW_SUNLIGHT in comparison is the illuminance of the
+            // sun unfiltered by the atmosphere, so it is the proper input for
+            // sunlight to be filtered by the atmosphere.
+            illuminance: if USE_ATMOSPHERE {
+                lux::RAW_SUNLIGHT
+            } else {
+                lux::AMBIENT_DAYLIGHT
+            },
             ..default()
         },
-        Transform::from_translation(Vec3::new(2.0, 0.5, 5.0)).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_translation(Vec3::new(2000.0, 1000., 5000.0)).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // Build the animation graph
@@ -120,6 +166,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut graphs: Res
             timer: 0.0,
         },
         SceneRoot(asset_server.load("su-75_anim/su-75.gltf#Scene0")),
+        Transform::from_translation(Vec3::ZERO.with_y(2.31)),
     ));
 }
 
@@ -133,7 +180,7 @@ fn chessboard_land_spawn(
 
     for x in -7..8 {
         for z in -7..250 {
-            let transform = Transform::from_xyz(x as f32 * 2.0, -2.31, z as f32 * 2.0);
+            let transform = Transform::from_xyz(x as f32 * 2.0, 0.0, z as f32 * 2.0);
 
             let mut mesh = cell_mesh.clone();
             mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![
