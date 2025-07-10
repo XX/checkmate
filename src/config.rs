@@ -10,6 +10,8 @@ use config_load::config::{ConfigBuilder, Environment};
 use config_load::{ConfigLoader, FileLocation, Load};
 use serde::{Deserialize, Serialize};
 
+use crate::AppState;
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct GameSettings {
@@ -24,6 +26,9 @@ pub struct GameSettings {
 
     #[serde(default)]
     pub flying_model: String,
+
+    #[serde(default)]
+    pub state: AppState,
 }
 
 impl Default for GameSettings {
@@ -33,6 +38,7 @@ impl Default for GameSettings {
             assets_root: Self::default_assets_root(),
             hangar_model: Default::default(),
             flying_model: Default::default(),
+            state: Default::default(),
         }
     }
 }

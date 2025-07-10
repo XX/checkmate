@@ -21,12 +21,16 @@ use bevy::prelude::{AnimationGraph, AnimationNodeIndex, Entity, MeshBuilder, def
 use bevy::reflect::Reflect;
 use bevy::render::camera::Exposure;
 use bevy::render::mesh::{Mesh, Mesh3d, Meshable};
-use bevy::scene::SceneRoot;
+use bevy::scene::{Scene, SceneRoot};
+use bevy::state::app::AppExtStates;
+use bevy::state::condition::in_state;
+use bevy::state::state::{NextState, OnEnter, OnExit, State, States};
 use bevy::transform::components::Transform;
 use bevy::window::Window;
 use bevy::{DefaultPlugins, log};
 use clap::Parser;
 use diagnostics::DiagnosticsPlugin;
+use serde::{Deserialize, Serialize};
 use utils::combine_meshes;
 
 use crate::camera::{AppCameraPlugin, LookingAt};
@@ -64,7 +68,10 @@ struct Animations {
 
 fn main() {
     let opts: cli::Opts = cli::Opts::parse();
-    let config = Config::load(opts.config).unwrap_or_default();
+    let config = Config::load(opts.config).unwrap_or_else(|err| {
+        eprintln!("WARNING: config load error: {err}, use default config");
+        Config::default()
+    });
 
     let camera_plugin = AppCameraPlugin::default()
         .with_smoothness_speed(8.0)
@@ -93,6 +100,7 @@ fn main() {
         camera_plugin
     };
 
+    let state = config.game.state;
     let mut app = App::new();
 
     if let Some(ambient_light) = config.environment.ambient.to_ambient_light() {
@@ -103,14 +111,49 @@ fn main() {
         size: config.graphics.shadow_map_size,
     })
     .insert_resource(config)
+    .insert_resource(Scenes::default())
     .add_plugins(DefaultPlugins)
     .add_plugins(DiagnosticsPlugin)
     .add_plugins(camera_plugin)
-    .add_systems(Startup, (chessboard_land_spawn, setup))
+    .insert_state(state)
+    .add_systems(Startup, setup)
+    .add_systems(
+        OnEnter(AppState::Hangar),
+        (setup_hangar, chessboard_land_spawn.after(setup_hangar)),
+    )
+    .add_systems(OnExit(AppState::Hangar), cleanup_hangar)
+    .add_systems(OnExit(AppState::InGame), cleanup_game)
+    .add_systems(OnEnter(AppState::InGame), setup_game)
+    .add_systems(Update, change_state)
     .add_systems(Update, attach_animations.before(animate_targets))
-    .add_systems(Update, control_land_gear_animation)
+    .add_systems(Update, control_land_gear_animation.run_if(in_state(AppState::Hangar)))
     .add_systems(Update, close_on_esc)
     .run();
+}
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States, Serialize, Deserialize)]
+enum AppState {
+    #[default]
+    Hangar,
+    InGame,
+}
+
+#[derive(Default, Resource)]
+pub struct Scenes {
+    pub hangar: Option<Handle<Scene>>,
+    pub game: Option<Handle<Scene>>,
+}
+
+#[derive(Resource)]
+pub struct HangarData {
+    pub entities: Vec<Entity>,
+    pub meshes: Vec<Handle<Mesh>>,
+    pub materials: Vec<Handle<StandardMaterial>>,
+}
+
+#[derive(Resource)]
+pub struct GameData {
+    pub entities: Vec<Entity>,
 }
 
 fn setup(
@@ -149,7 +192,7 @@ fn setup(
     let mut graph = AnimationGraph::new();
     let animations = graph
         .add_clips(
-            [GltfAssetLabel::Animation(0).from_asset(config.game.flying_model.clone())]
+            [GltfAssetLabel::Animation(0).from_asset(config.game.hangar_model.clone())]
                 .into_iter()
                 .map(|path| asset_server.load(path)),
             1.0,
@@ -163,21 +206,86 @@ fn setup(
         animations,
         graph: graph.clone(),
     });
+}
 
-    commands.spawn((
-        PlaneMovement {
-            target_pos: Vec3::ZERO,
-            timer: 0.0,
-        },
-        SceneRoot(asset_server.load(format!("{}#Scene0", config.game.flying_model))),
-        Transform::from_translation(Vec3::ZERO.with_y(2.31)),
-    ));
+fn setup_hangar(
+    mut commands: Commands,
+    config: Res<Config>,
+    asset_server: Res<AssetServer>,
+    mut scenes: ResMut<Scenes>,
+) {
+    let scene = scenes
+        .hangar
+        .get_or_insert_with(|| asset_server.load(format!("{}#Scene0", config.game.hangar_model)))
+        .clone();
+
+    let entity_id = commands
+        .spawn((SceneRoot(scene), Transform::from_translation(Vec3::ZERO.with_y(2.31))))
+        .id();
+
+    commands.insert_resource(HangarData {
+        entities: vec![entity_id],
+        meshes: vec![],
+        materials: vec![],
+    });
+}
+
+fn cleanup_hangar(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    data: Res<HangarData>,
+) {
+    for entity in &data.entities {
+        commands.entity(*entity).despawn();
+    }
+
+    for mesh in &data.meshes {
+        meshes.remove(mesh);
+    }
+
+    for material in &data.materials {
+        materials.remove(material);
+    }
+
+    commands.remove_resource::<HangarData>();
+}
+
+fn setup_game(mut commands: Commands, config: Res<Config>, asset_server: Res<AssetServer>, mut scenes: ResMut<Scenes>) {
+    let scene = scenes
+        .game
+        .get_or_insert_with(|| asset_server.load(format!("{}#Scene0", config.game.flying_model)))
+        .clone();
+
+    let entity_id = commands
+        .spawn((
+            PlaneMovement {
+                target_pos: Vec3::ZERO,
+                timer: 0.0,
+            },
+            SceneRoot(scene),
+            Transform::from_translation(Vec3::ZERO.with_y(2.31)),
+        ))
+        .id();
+
+    commands.insert_resource(GameData {
+        entities: vec![entity_id],
+    });
+}
+
+fn cleanup_game(mut commands: Commands, data: Res<GameData>) {
+    for entity in &data.entities {
+        commands.entity(*entity).despawn();
+    }
+
+    commands.remove_resource::<GameData>();
 }
 
 fn chessboard_land_spawn(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut data: ResMut<HangarData>,
 ) {
     let mut mesh_data = Vec::new();
     let cell_mesh = Plane3d::default().mesh().size(2.0, 2.0).build();
@@ -202,7 +310,15 @@ fn chessboard_land_spawn(
     }
 
     let mesh = meshes.add(combine_meshes(&mesh_data, true, false, false, true));
-    commands.spawn((Mesh3d(mesh), MeshMaterial3d(materials.add(Color::WHITE))));
+    let material = materials.add(Color::WHITE);
+
+    let entity_id = commands
+        .spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())))
+        .id();
+
+    data.entities.push(entity_id);
+    data.meshes.push(mesh);
+    data.materials.push(material);
 }
 
 /// Attaches the animation graph to the scene
@@ -212,7 +328,6 @@ fn attach_animations(
     animations: Res<Animations>,
 ) {
     for (entity, _player) in &to_animated_entities {
-        log::info!("Attaching animations");
         commands
             .entity(entity)
             .insert(AnimationGraphHandle(animations.graph.clone()));
@@ -257,6 +372,23 @@ fn control_land_gear_animation(
             player.play(node_index);
         }
         *reverse = !*reverse;
+    }
+}
+
+fn change_state(
+    input: Res<ButtonInput<KeyCode>>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if input.just_pressed(KeyCode::Tab) {
+        match state.get() {
+            AppState::Hangar => {
+                next_state.set(AppState::InGame);
+            },
+            AppState::InGame => {
+                next_state.set(AppState::Hangar);
+            },
+        }
     }
 }
 
