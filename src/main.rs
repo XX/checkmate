@@ -19,7 +19,7 @@ use bevy::pbr::{
 };
 use bevy::prelude::{AnimationGraph, AnimationNodeIndex, Entity, MeshBuilder, default};
 use bevy::reflect::Reflect;
-use bevy::render::camera::Exposure;
+use bevy::render::camera::{ClearColorConfig, Exposure};
 use bevy::render::mesh::{Mesh, Mesh3d, Meshable};
 use bevy::scene::{Scene, SceneRoot};
 use bevy::state::app::AppExtStates;
@@ -75,7 +75,6 @@ fn main() {
 
     let camera_params = AppCameraParams::default()
         .with_smoothness_speed(8.0)
-        .with_custom_clear_color(Color::srgb(0.7, 0.92, 0.96))
         .width_translate(Vec3::new(-3.0, 5.0, 15.0))
         .width_look_at(LookingAt {
             target: Vec3::ZERO.with_y(2.31),
@@ -85,6 +84,7 @@ fn main() {
 
     let camera_params = if config.environment.atmosphere.enabled {
         camera_params
+            .with_clear_color_config(ClearColorConfig::Default)
             .with_exposure(Exposure {
                 ev100: config.camera.exposure,
             })
@@ -94,7 +94,7 @@ fn main() {
                 ..Default::default()
             }))
     } else {
-        camera_params
+        camera_params.with_custom_clear_color(Color::srgb(0.7, 0.92, 0.96))
     };
 
     let camera_params = if let Some(auto_exposure) = config.camera.auto_exposure.to_auto_exposure() {
