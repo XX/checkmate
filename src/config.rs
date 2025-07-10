@@ -3,8 +3,10 @@ use std::path::{Path, PathBuf};
 
 use bevy::color::Color;
 use bevy::core_pipeline::auto_exposure::AutoExposure;
+use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::resource::Resource;
 use bevy::pbr::AmbientLight;
+use bevy::pbr::light_consts::lux;
 use config_load::config::builder::DefaultState;
 use config_load::config::{ConfigBuilder, Environment};
 use config_load::{ConfigLoader, FileLocation, Load};
@@ -78,13 +80,54 @@ impl GraphicsSettings {
 #[serde(default)]
 pub struct EnvironmentSettings {
     #[serde(default)]
+    pub light: LightSettings,
+
+    #[serde(default)]
     pub ambient: AmbientSettings,
 
     #[serde(default)]
-    pub auto_exposure: AutoExposureSettings,
+    pub atmosphere: AtmosphereSettings,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct LightSettings {
+    #[serde(default = "LightSettings::default_illuminance")]
+    pub illuminance: f32,
+
+    #[serde(default = "LightSettings::default_shadows_enabled")]
+    pub shadows_enabled: bool,
+
+    #[serde(default = "LightSettings::default_position")]
+    pub position: [f32; 3],
 
     #[serde(default)]
-    pub atmosphere: AtmosphereSettings,
+    pub target: [f32; 3],
+}
+
+impl Default for LightSettings {
+    fn default() -> Self {
+        Self {
+            illuminance: Self::default_illuminance(),
+            shadows_enabled: Self::default_shadows_enabled(),
+            position: Self::default_position(),
+            target: Default::default(),
+        }
+    }
+}
+
+impl LightSettings {
+    pub const fn default_illuminance() -> f32 {
+        lux::AMBIENT_DAYLIGHT
+    }
+
+    pub const fn default_shadows_enabled() -> bool {
+        true
+    }
+
+    pub const fn default_position() -> [f32; 3] {
+        [20000.0, 10000., 50000.0]
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -140,6 +183,26 @@ impl AmbientSettings {
     }
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct AtmosphereSettings {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CameraSettings {
+    #[serde(default)]
+    pub exposure: f32,
+
+    #[serde(default)]
+    pub auto_exposure: AutoExposureSettings,
+
+    #[serde(default)]
+    pub tonemap: Tonemap,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AutoExposureSettings {
@@ -184,11 +247,38 @@ impl AutoExposureSettings {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(default)]
-pub struct AtmosphereSettings {
-    #[serde(default)]
-    pub enabled: bool,
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+pub enum Tonemap {
+    #[default]
+    None,
+    Reinhard,
+    ReinhardLuminance,
+    AcesFitted,
+    AgX,
+    SomewhatBoringDisplayTransform,
+    TonyMcMapface,
+    BlenderFilmic,
+}
+
+impl Tonemap {
+    pub fn to_tonemapping(&self) -> Tonemapping {
+        match self {
+            Self::None => Tonemapping::None,
+            Self::Reinhard => Tonemapping::Reinhard,
+            Self::ReinhardLuminance => Tonemapping::ReinhardLuminance,
+            Self::AcesFitted => Tonemapping::AcesFitted,
+            Self::AgX => Tonemapping::AgX,
+            Self::SomewhatBoringDisplayTransform => Tonemapping::SomewhatBoringDisplayTransform,
+            Self::TonyMcMapface => Tonemapping::TonyMcMapface,
+            Self::BlenderFilmic => Tonemapping::BlenderFilmic,
+        }
+    }
+}
+
+impl From<Tonemap> for Tonemapping {
+    fn from(value: Tonemap) -> Self {
+        value.to_tonemapping()
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -237,6 +327,9 @@ pub struct Config {
 
     #[serde(default)]
     pub environment: EnvironmentSettings,
+
+    #[serde(default)]
+    pub camera: CameraSettings,
 
     #[serde(default)]
     pub log: LoggerSettings,

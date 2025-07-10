@@ -38,6 +38,7 @@ pub struct AppCameraParams {
     pub exposure: Exposure,
     pub auto_exposure: Option<AutoExposure>,
     pub atmosphere: Option<(Atmosphere, AtmosphereSettings)>,
+    pub tonemapping: Tonemapping,
 }
 
 impl Default for AppCameraParams {
@@ -53,6 +54,7 @@ impl Default for AppCameraParams {
             exposure: Exposure::default(),
             auto_exposure: None,
             atmosphere: None,
+            tonemapping: Tonemapping::default(),
         }
     }
 }
@@ -95,6 +97,11 @@ impl AppCameraParams {
 
     pub fn with_atmosphere(mut self, atmosphere: (Atmosphere, AtmosphereSettings)) -> Self {
         self.atmosphere = Some(atmosphere);
+        self
+    }
+
+    pub fn with_tonemapping(mut self, tonemapping: impl Into<Tonemapping>) -> Self {
+        self.tonemapping = tonemapping.into();
         self
     }
 }
@@ -151,8 +158,7 @@ pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
         params.exposure.clone(),
         // Tonemapper chosen just because it looked good with the scene, any
         // tonemapper would be fine :)
-        // Tonemapping::AcesFitted,
-        Tonemapping::BlenderFilmic,
+        params.tonemapping,
         // Bloom gives the sun a much more natural look.
         Bloom::NATURAL,
     ));

@@ -14,7 +14,6 @@ use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::math::primitives::Plane3d;
 use bevy::math::{Dir3, Vec3};
-use bevy::pbr::light_consts::lux;
 use bevy::pbr::{
     Atmosphere, AtmosphereSettings, DirectionalLight, DirectionalLightShadowMap, MeshMaterial3d, StandardMaterial,
 };
@@ -81,11 +80,14 @@ fn main() {
         .width_look_at(LookingAt {
             target: Vec3::ZERO.with_y(2.31),
             up: Dir3::Y,
-        });
+        })
+        .with_tonemapping(config.camera.tonemap);
 
     let camera_params = if config.environment.atmosphere.enabled {
         camera_params
-            .with_exposure(Exposure::SUNLIGHT)
+            .with_exposure(Exposure {
+                ev100: config.camera.exposure,
+            })
             .with_atmosphere((Atmosphere::EARTH, AtmosphereSettings {
                 // aerial_view_lut_max_distance: 3.2e5,
                 scene_units_to_m: 1.0, //1e+4,
@@ -95,7 +97,7 @@ fn main() {
         camera_params
     };
 
-    let camera_params = if let Some(auto_exposure) = config.environment.auto_exposure.to_auto_exposure() {
+    let camera_params = if let Some(auto_exposure) = config.camera.auto_exposure.to_auto_exposure() {
         camera_params.with_auto_exposure(auto_exposure)
     } else {
         camera_params
@@ -175,20 +177,12 @@ fn setup(
 
     commands.spawn((
         DirectionalLight {
-            shadows_enabled: true,
-            illuminance: if config.environment.atmosphere.enabled {
-                // lux::RAW_SUNLIGHT is recommended for use with this feature, since
-                // other values approximate sunlight *post-scattering* in various
-                // conditions. RAW_SUNLIGHT in comparison is the illuminance of the
-                // sun unfiltered by the atmosphere, so it is the proper input for
-                // sunlight to be filtered by the atmosphere.
-                lux::RAW_SUNLIGHT
-            } else {
-                lux::AMBIENT_DAYLIGHT
-            },
+            shadows_enabled: config.environment.light.shadows_enabled,
+            illuminance: config.environment.light.illuminance,
             ..default()
         },
-        Transform::from_translation(Vec3::new(20000.0, 10000., 50000.0)).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_translation(config.environment.light.position.into())
+            .looking_at(config.environment.light.target.into(), Vec3::Y),
     ));
 
     // Build the animation graph
