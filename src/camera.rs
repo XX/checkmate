@@ -4,8 +4,10 @@ use bevy::core_pipeline::auto_exposure::{AutoExposure, AutoExposurePlugin};
 use bevy::core_pipeline::bloom::Bloom;
 use bevy::core_pipeline::core_3d::Camera3d;
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::ecs::entity::Entity;
+use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
-use bevy::ecs::system::Commands;
+use bevy::ecs::system::{Commands, Res};
 use bevy::math::{Dir3, Vec3};
 use bevy::pbr::{Atmosphere, AtmosphereSettings};
 use bevy::render::camera::{Camera, ClearColorConfig, Exposure, PerspectiveProjection, Projection};
@@ -16,24 +18,29 @@ use crate::camera::panorbit::{PanOrbitCamera, PanOrbitCameraTarget};
 pub mod panorbit;
 pub mod simple;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct LookingAt {
     pub target: Vec3,
     pub up: Dir3,
 }
 
-#[derive(Clone)]
-pub struct AppCameraPlugin {
-    smoothness_speed: f32,
-    clear_color: ClearColorConfig,
-    translate: Vec3,
-    look_at: LookingAt,
-    exposure: Exposure,
-    auto_exposure: Option<AutoExposure>,
-    atmosphere: Option<fn() -> (Atmosphere, AtmosphereSettings)>,
+#[derive(Clone, Copy, Debug, Resource)]
+pub struct AppCameraEntity {
+    pub entity_id: Entity,
 }
 
-impl Default for AppCameraPlugin {
+#[derive(Clone, Resource)]
+pub struct AppCameraParams {
+    pub smoothness_speed: f32,
+    pub clear_color: ClearColorConfig,
+    pub translate: Vec3,
+    pub look_at: LookingAt,
+    pub exposure: Exposure,
+    pub auto_exposure: Option<AutoExposure>,
+    pub atmosphere: Option<(Atmosphere, AtmosphereSettings)>,
+}
+
+impl Default for AppCameraParams {
     fn default() -> Self {
         Self {
             smoothness_speed: 8.0,
@@ -50,7 +57,7 @@ impl Default for AppCameraPlugin {
     }
 }
 
-impl AppCameraPlugin {
+impl AppCameraParams {
     pub fn with_smoothness_speed(mut self, smoothness_speed: f32) -> Self {
         self.smoothness_speed = smoothness_speed;
         self
@@ -86,69 +93,78 @@ impl AppCameraPlugin {
         self
     }
 
-    pub fn with_atmosphere(mut self, atmosphere: fn() -> (Atmosphere, AtmosphereSettings)) -> Self {
+    pub fn with_atmosphere(mut self, atmosphere: (Atmosphere, AtmosphereSettings)) -> Self {
         self.atmosphere = Some(atmosphere);
         self
     }
-
-    pub fn spawn_panorbit(&self, mut commands: Commands) {
-        let focus = self.look_at.target;
-        let radius = (self.translate - focus).length();
-        let transform = Transform::from_translation(self.translate).looking_at(self.look_at.target, self.look_at.up);
-
-        let mut entity = commands.spawn((
-            Camera3d::default(),
-            Camera {
-                hdr: true,
-                clear_color: self.clear_color,
-                ..Default::default()
-            },
-            Projection::Perspective(PerspectiveProjection {
-                fov: 45.0_f32.to_radians(),
-                ..Default::default()
-            }),
-            PanOrbitCamera {
-                radius,
-                focus,
-                ..Default::default()
-            },
-            PanOrbitCameraTarget {
-                focus,
-                radius,
-                rotation: transform.rotation,
-            },
-            transform,
-            // The directional light illuminance used in this scene
-            // (the one recommended for use with this feature) is
-            // quite bright, so raising the exposure compensation helps
-            // bring the scene to a nicer brightness range.
-            self.exposure,
-            // Tonemapper chosen just because it looked good with the scene, any
-            // tonemapper would be fine :)
-            // Tonemapping::AcesFitted,
-            Tonemapping::BlenderFilmic,
-            // Bloom gives the sun a much more natural look.
-            Bloom::NATURAL,
-        ));
-
-        if let Some(auto_exposure) = self.auto_exposure.clone() {
-            entity.insert(auto_exposure);
-        }
-
-        if let Some(atmosphere) = self.atmosphere {
-            entity.insert(atmosphere());
-        }
-    }
 }
+
+#[derive(Clone, Copy)]
+pub struct AppCameraPlugin;
 
 impl Plugin for AppCameraPlugin {
     fn build(&self, app: &mut App) {
-        let this = self.clone();
+        app.init_resource::<AppCameraParams>();
 
-        if this.auto_exposure.is_some() {
+        if let Some(params) = app.world().get_resource::<AppCameraParams>()
+            && params.auto_exposure.is_some()
+        {
             app.add_plugins(AutoExposurePlugin);
         }
-        app.add_systems(Startup, move |commands: Commands| this.spawn_panorbit(commands))
+
+        app.add_systems(Startup, spawn_panorbit)
             .add_systems(Update, (panorbit::update_input, panorbit::interpolate_camera).chain());
     }
+}
+
+pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
+    let focus = params.look_at.target;
+    let radius = (params.translate - focus).length();
+    let transform = Transform::from_translation(params.translate).looking_at(params.look_at.target, params.look_at.up);
+
+    let mut entity = commands.spawn((
+        Camera3d::default(),
+        Camera {
+            hdr: true,
+            clear_color: params.clear_color,
+            ..Default::default()
+        },
+        Projection::Perspective(PerspectiveProjection {
+            fov: 45.0_f32.to_radians(),
+            ..Default::default()
+        }),
+        PanOrbitCamera {
+            radius,
+            focus,
+            ..Default::default()
+        },
+        PanOrbitCameraTarget {
+            focus,
+            radius,
+            rotation: transform.rotation,
+        },
+        transform,
+        // The directional light illuminance used in this scene
+        // (the one recommended for use with this feature) is
+        // quite bright, so raising the exposure compensation helps
+        // bring the scene to a nicer brightness range.
+        params.exposure.clone(),
+        // Tonemapper chosen just because it looked good with the scene, any
+        // tonemapper would be fine :)
+        // Tonemapping::AcesFitted,
+        Tonemapping::BlenderFilmic,
+        // Bloom gives the sun a much more natural look.
+        Bloom::NATURAL,
+    ));
+
+    if let Some(auto_exposure) = params.auto_exposure.clone() {
+        entity.insert(auto_exposure);
+    }
+
+    if let Some(atmosphere) = params.atmosphere.clone() {
+        entity.insert(atmosphere);
+    }
+
+    let entity_id = entity.id();
+    commands.insert_resource(AppCameraEntity { entity_id });
 }

@@ -1,3 +1,4 @@
+use bevy::DefaultPlugins;
 use bevy::animation::graph::{AnimationGraphHandle, AnimationNodeType};
 use bevy::animation::{AnimationClip, AnimationPlayer, animate_targets};
 use bevy::app::{App, Startup, Update};
@@ -27,13 +28,12 @@ use bevy::state::condition::in_state;
 use bevy::state::state::{NextState, OnEnter, OnExit, State, States};
 use bevy::transform::components::Transform;
 use bevy::window::Window;
-use bevy::{DefaultPlugins, log};
 use clap::Parser;
 use diagnostics::DiagnosticsPlugin;
 use serde::{Deserialize, Serialize};
 use utils::combine_meshes;
 
-use crate::camera::{AppCameraPlugin, LookingAt};
+use crate::camera::{AppCameraEntity, AppCameraParams, AppCameraPlugin, LookingAt};
 use crate::config::Config;
 
 mod camera;
@@ -44,6 +44,7 @@ mod utils;
 
 pub const LANDSCAPE_SIZE: f32 = 1200.0;
 pub const LANDSCAPE_SIZE_HALF: f32 = LANDSCAPE_SIZE * 0.5;
+pub const FLY_HEIGHT: f32 = 3000.0;
 
 #[derive(Resource, Reflect)]
 pub struct PlaneSettings {
@@ -73,7 +74,7 @@ fn main() {
         Config::default()
     });
 
-    let camera_plugin = AppCameraPlugin::default()
+    let camera_params = AppCameraParams::default()
         .with_smoothness_speed(8.0)
         .with_custom_clear_color(Color::srgb(0.7, 0.92, 0.96))
         .width_translate(Vec3::new(-3.0, 5.0, 15.0))
@@ -82,58 +83,59 @@ fn main() {
             up: Dir3::Y,
         });
 
-    let camera_plugin = if config.environment.atmosphere.enabled {
-        camera_plugin.with_exposure(Exposure::SUNLIGHT).with_atmosphere(|| {
-            (Atmosphere::EARTH, AtmosphereSettings {
+    let camera_params = if config.environment.atmosphere.enabled {
+        camera_params
+            .with_exposure(Exposure::SUNLIGHT)
+            .with_atmosphere((Atmosphere::EARTH, AtmosphereSettings {
                 // aerial_view_lut_max_distance: 3.2e5,
                 scene_units_to_m: 1.0, //1e+4,
                 ..Default::default()
-            })
-        })
+            }))
     } else {
-        camera_plugin
+        camera_params
     };
 
-    let camera_plugin = if let Some(auto_exposure) = config.environment.auto_exposure.to_auto_exposure() {
-        camera_plugin.with_auto_exposure(auto_exposure)
+    let camera_params = if let Some(auto_exposure) = config.environment.auto_exposure.to_auto_exposure() {
+        camera_params.with_auto_exposure(auto_exposure)
     } else {
-        camera_plugin
+        camera_params
     };
 
-    let state = config.game.state;
     let mut app = App::new();
 
     if let Some(ambient_light) = config.environment.ambient.to_ambient_light() {
         app.insert_resource(ambient_light);
     }
 
-    app.insert_resource(DirectionalLightShadowMap {
-        size: config.graphics.shadow_map_size,
-    })
-    .insert_resource(config)
-    .insert_resource(Scenes::default())
-    .add_plugins(DefaultPlugins)
-    .add_plugins(DiagnosticsPlugin)
-    .add_plugins(camera_plugin)
-    .insert_state(state)
-    .add_systems(Startup, setup)
-    .add_systems(
-        OnEnter(AppState::Hangar),
-        (setup_hangar, chessboard_land_spawn.after(setup_hangar)),
-    )
-    .add_systems(OnExit(AppState::Hangar), cleanup_hangar)
-    .add_systems(OnExit(AppState::InGame), cleanup_game)
-    .add_systems(OnEnter(AppState::InGame), setup_game)
-    .add_systems(Update, change_state)
-    .add_systems(Update, attach_animations.before(animate_targets))
-    .add_systems(Update, control_land_gear_animation.run_if(in_state(AppState::Hangar)))
-    .add_systems(Update, close_on_esc)
-    .run();
+    app.insert_resource(camera_params)
+        .insert_resource(DirectionalLightShadowMap {
+            size: config.graphics.shadow_map_size,
+        })
+        .insert_resource(config)
+        .insert_resource(Scenes::default())
+        .add_plugins(DefaultPlugins)
+        .add_plugins(DiagnosticsPlugin)
+        .add_plugins(AppCameraPlugin)
+        .init_state::<AppState>()
+        .add_systems(Startup, setup)
+        .add_systems(
+            OnEnter(AppState::Hangar),
+            (setup_hangar, chessboard_land_spawn.after(setup_hangar)),
+        )
+        .add_systems(OnExit(AppState::Hangar), cleanup_hangar)
+        .add_systems(OnExit(AppState::InGame), cleanup_game)
+        .add_systems(OnEnter(AppState::InGame), setup_game)
+        .add_systems(Update, change_state)
+        .add_systems(Update, attach_animations.before(animate_targets))
+        .add_systems(Update, control_land_gear_animation.run_if(in_state(AppState::Hangar)))
+        .add_systems(Update, close_on_esc)
+        .run();
 }
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States, Serialize, Deserialize)]
 enum AppState {
     #[default]
+    Loading,
     Hangar,
     InGame,
 }
@@ -161,6 +163,7 @@ fn setup(
     config: Res<Config>,
     asset_server: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut next_state: ResMut<NextState<AppState>>,
 ) {
     commands.insert_resource(PlaneSettings {
         move_interval: 1.3,
@@ -173,19 +176,19 @@ fn setup(
     commands.spawn((
         DirectionalLight {
             shadows_enabled: true,
-            // lux::RAW_SUNLIGHT is recommended for use with this feature, since
-            // other values approximate sunlight *post-scattering* in various
-            // conditions. RAW_SUNLIGHT in comparison is the illuminance of the
-            // sun unfiltered by the atmosphere, so it is the proper input for
-            // sunlight to be filtered by the atmosphere.
             illuminance: if config.environment.atmosphere.enabled {
+                // lux::RAW_SUNLIGHT is recommended for use with this feature, since
+                // other values approximate sunlight *post-scattering* in various
+                // conditions. RAW_SUNLIGHT in comparison is the illuminance of the
+                // sun unfiltered by the atmosphere, so it is the proper input for
+                // sunlight to be filtered by the atmosphere.
                 lux::RAW_SUNLIGHT
             } else {
                 lux::AMBIENT_DAYLIGHT
             },
             ..default()
         },
-        Transform::from_translation(Vec3::new(2000.0, 1000., 5000.0)).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_translation(Vec3::new(20000.0, 10000., 50000.0)).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // Build the animation graph
@@ -206,6 +209,8 @@ fn setup(
         animations,
         graph: graph.clone(),
     });
+
+    next_state.set(config.game.state);
 }
 
 fn setup_hangar(
@@ -213,6 +218,8 @@ fn setup_hangar(
     config: Res<Config>,
     asset_server: Res<AssetServer>,
     mut scenes: ResMut<Scenes>,
+    camera: Res<AppCameraEntity>,
+    camera_params: ResMut<AppCameraParams>,
 ) {
     let scene = scenes
         .hangar
@@ -228,6 +235,8 @@ fn setup_hangar(
         meshes: vec![],
         materials: vec![],
     });
+
+    reinit_camera(commands, camera_params.into(), camera.entity_id, 2.31);
 }
 
 fn cleanup_hangar(
@@ -251,7 +260,14 @@ fn cleanup_hangar(
     commands.remove_resource::<HangarData>();
 }
 
-fn setup_game(mut commands: Commands, config: Res<Config>, asset_server: Res<AssetServer>, mut scenes: ResMut<Scenes>) {
+fn setup_game(
+    mut commands: Commands,
+    config: Res<Config>,
+    asset_server: Res<AssetServer>,
+    mut scenes: ResMut<Scenes>,
+    camera: Res<AppCameraEntity>,
+    camera_params: ResMut<AppCameraParams>,
+) {
     let scene = scenes
         .game
         .get_or_insert_with(|| asset_server.load(format!("{}#Scene0", config.game.flying_model)))
@@ -264,13 +280,15 @@ fn setup_game(mut commands: Commands, config: Res<Config>, asset_server: Res<Ass
                 timer: 0.0,
             },
             SceneRoot(scene),
-            Transform::from_translation(Vec3::ZERO.with_y(2.31)),
+            Transform::from_translation(Vec3::ZERO.with_y(FLY_HEIGHT)),
         ))
         .id();
 
     commands.insert_resource(GameData {
         entities: vec![entity_id],
     });
+
+    reinit_camera(commands, camera_params.into(), camera.entity_id, FLY_HEIGHT);
 }
 
 fn cleanup_game(mut commands: Commands, data: Res<GameData>) {
@@ -382,6 +400,7 @@ fn change_state(
 ) {
     if input.just_pressed(KeyCode::Tab) {
         match state.get() {
+            AppState::Loading => {},
             AppState::Hangar => {
                 next_state.set(AppState::InGame);
             },
@@ -406,4 +425,13 @@ pub fn close_on_esc(
             commands.entity(window).despawn();
         }
     }
+}
+
+fn reinit_camera(mut commands: Commands, mut params: ResMut<AppCameraParams>, camera: Entity, height: f32) {
+    commands.entity(camera).despawn();
+
+    params.translate = Vec3::new(-3.0, height + 5.0, 15.0);
+    params.look_at.target = Vec3::ZERO.with_y(height);
+
+    camera::spawn_panorbit(commands, params.into());
 }
