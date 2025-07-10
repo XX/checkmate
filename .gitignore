@@ -1,6 +1,9 @@
 **/target/
 **/*.rs.bk
 
+/assets/
+Config.toml
+
 TODO.*
 
 **/.idea

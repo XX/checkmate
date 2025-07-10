@@ -22,14 +22,14 @@ pub struct LookingAt {
     pub up: Dir3,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct AppCameraPlugin {
     smoothness_speed: f32,
     clear_color: ClearColorConfig,
     translate: Vec3,
     look_at: LookingAt,
     exposure: Exposure,
-    auto_exposure: Option<fn() -> AutoExposure>,
+    auto_exposure: Option<AutoExposure>,
     atmosphere: Option<fn() -> (Atmosphere, AtmosphereSettings)>,
 }
 
@@ -81,7 +81,7 @@ impl AppCameraPlugin {
         self
     }
 
-    pub fn with_auto_exposure(mut self, auto_exposure: fn() -> AutoExposure) -> Self {
+    pub fn with_auto_exposure(mut self, auto_exposure: AutoExposure) -> Self {
         self.auto_exposure = Some(auto_exposure);
         self
     }
@@ -91,7 +91,7 @@ impl AppCameraPlugin {
         self
     }
 
-    pub fn spawn_panorbit(self, mut commands: Commands) {
+    pub fn spawn_panorbit(&self, mut commands: Commands) {
         let focus = self.look_at.target;
         let radius = (self.translate - focus).length();
         let transform = Transform::from_translation(self.translate).looking_at(self.look_at.target, self.look_at.up);
@@ -131,8 +131,8 @@ impl AppCameraPlugin {
             Bloom::NATURAL,
         ));
 
-        if let Some(auto_exposure) = self.auto_exposure {
-            entity.insert(auto_exposure());
+        if let Some(auto_exposure) = self.auto_exposure.clone() {
+            entity.insert(auto_exposure);
         }
 
         if let Some(atmosphere) = self.atmosphere {
