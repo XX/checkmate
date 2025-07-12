@@ -7,7 +7,7 @@ use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
-use bevy::ecs::system::{Commands, Res};
+use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::math::{Dir3, Vec3};
 use bevy::pbr::{Atmosphere, AtmosphereSettings};
 use bevy::render::camera::{Camera, ClearColorConfig, Exposure, PerspectiveProjection, Projection};
@@ -173,4 +173,19 @@ pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
 
     let entity_id = entity.id();
     commands.insert_resource(AppCameraEntity { entity_id });
+}
+
+pub fn respawn_panorbit(
+    mut commands: Commands,
+    mut params: ResMut<AppCameraParams>,
+    camera: Entity,
+    translate: Vec3,
+    target: Vec3,
+) {
+    commands.entity(camera).despawn();
+
+    params.translate = translate;
+    params.look_at.target = target;
+
+    spawn_panorbit(commands, params.into());
 }
