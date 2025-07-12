@@ -113,8 +113,11 @@ fn main() {
             (hangar::setup, hangar::chessboard_land_spawn.after(hangar::setup)),
         )
         .add_systems(OnExit(AppState::Hangar), hangar::cleanup)
+        .add_systems(
+            OnEnter(AppState::InGame),
+            (ingame::setup, ingame::terrain::setup.after(ingame::setup)),
+        )
         .add_systems(OnExit(AppState::InGame), ingame::cleanup)
-        .add_systems(OnEnter(AppState::InGame), ingame::setup)
         .add_systems(Update, state::change)
         .add_systems(Update, attach_animations.before(animate_targets))
         .add_systems(

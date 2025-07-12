@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::asset::Handle;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Res, ResMut};
@@ -18,10 +20,16 @@ pub enum AppState {
     InGame,
 }
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+pub enum SceneKey {
+    Aircraft,
+    Terrain,
+}
+
 #[derive(Default, Resource)]
 pub struct Scenes {
-    pub hangar: Option<Handle<Scene>>,
-    pub game: Option<Handle<Scene>>,
+    pub hangar: HashMap<SceneKey, Handle<Scene>>,
+    pub game: HashMap<SceneKey, Handle<Scene>>,
 }
 
 pub fn change(

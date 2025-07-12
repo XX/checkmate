@@ -4,6 +4,7 @@ use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::{Color, ColorToComponents, LinearRgba};
 use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Commands, Local, Query, Res, ResMut};
+use bevy::gltf::GltfAssetLabel;
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::math::Vec3;
@@ -16,7 +17,7 @@ use bevy::transform::components::Transform;
 
 use crate::camera::{AppCameraEntity, AppCameraParams};
 use crate::config::Config;
-use crate::state::Scenes;
+use crate::state::{SceneKey, Scenes};
 use crate::utils::combine_meshes;
 use crate::{Animations, camera};
 
@@ -37,7 +38,8 @@ pub fn setup(
 ) {
     let scene = scenes
         .hangar
-        .get_or_insert_with(|| asset_server.load(format!("{}#Scene0", config.game.hangar_model)))
+        .entry(SceneKey::Aircraft)
+        .or_insert_with(|| asset_server.load(GltfAssetLabel::Scene(0).from_asset(config.game.hangar_model.clone())))
         .clone();
 
     let height = 2.31;

@@ -5,8 +5,10 @@ use bevy::color::Color;
 use bevy::core_pipeline::auto_exposure::AutoExposure;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::resource::Resource;
+use bevy::math::Vec3;
 use bevy::pbr::AmbientLight;
 use bevy::pbr::light_consts::lux;
+use bevy::transform::components::Transform;
 use config_load::config::builder::DefaultState;
 use config_load::config::{ConfigBuilder, Environment};
 use config_load::{ConfigLoader, FileLocation, Load};
@@ -29,6 +31,12 @@ pub struct GameSettings {
     #[serde(default)]
     pub flying_model: String,
 
+    #[serde(default = "GameSettings::default_flight_altitude")]
+    pub flight_altitude: f32,
+
+    #[serde(default)]
+    pub terrain: TerrainSettings,
+
     #[serde(default)]
     pub state: AppState,
 }
@@ -40,6 +48,8 @@ impl Default for GameSettings {
             assets_root: Self::default_assets_root(),
             hangar_model: Default::default(),
             flying_model: Default::default(),
+            flight_altitude: Self::default_flight_altitude(),
+            terrain: Default::default(),
             state: Default::default(),
         }
     }
@@ -52,6 +62,43 @@ impl GameSettings {
 
     pub fn default_assets_root() -> PathBuf {
         PathBuf::from("assets")
+    }
+
+    pub const fn default_flight_altitude() -> f32 {
+        1000.0
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct TerrainSettings {
+    #[serde(default)]
+    pub model: String,
+
+    #[serde(default)]
+    pub position: [f32; 3],
+
+    #[serde(default = "TerrainSettings::default_scale")]
+    pub scale: f32,
+}
+
+impl Default for TerrainSettings {
+    fn default() -> Self {
+        Self {
+            model: Default::default(),
+            position: Default::default(),
+            scale: Self::default_scale(),
+        }
+    }
+}
+
+impl TerrainSettings {
+    pub const fn default_scale() -> f32 {
+        1.0
+    }
+
+    pub fn get_transform(&self) -> Transform {
+        Transform::from_translation(self.position.into()).with_scale(Vec3::splat(self.scale))
     }
 }
 
