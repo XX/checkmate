@@ -80,7 +80,7 @@ impl GraphicsSettings {
 #[serde(default)]
 pub struct EnvironmentSettings {
     #[serde(default)]
-    pub light: LightSettings,
+    pub sun: SunSettings,
 
     #[serde(default)]
     pub ambient: AmbientSettings,
@@ -91,21 +91,21 @@ pub struct EnvironmentSettings {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
-pub struct LightSettings {
-    #[serde(default = "LightSettings::default_illuminance")]
+pub struct SunSettings {
+    #[serde(default = "SunSettings::default_illuminance")]
     pub illuminance: f32,
 
-    #[serde(default = "LightSettings::default_shadows_enabled")]
+    #[serde(default = "SunSettings::default_shadows_enabled")]
     pub shadows_enabled: bool,
 
-    #[serde(default = "LightSettings::default_position")]
+    #[serde(default = "SunSettings::default_position")]
     pub position: [f32; 3],
 
     #[serde(default)]
     pub target: [f32; 3],
 }
 
-impl Default for LightSettings {
+impl Default for SunSettings {
     fn default() -> Self {
         Self {
             illuminance: Self::default_illuminance(),
@@ -116,7 +116,7 @@ impl Default for LightSettings {
     }
 }
 
-impl LightSettings {
+impl SunSettings {
     pub const fn default_illuminance() -> f32 {
         lux::AMBIENT_DAYLIGHT
     }

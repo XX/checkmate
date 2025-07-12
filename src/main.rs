@@ -4,6 +4,7 @@ use bevy::animation::{AnimationPlayer, animate_targets};
 use bevy::app::{App, Startup, Update};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::Color;
+use bevy::ecs::component::Component;
 use bevy::ecs::query::Added;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
@@ -124,6 +125,9 @@ fn main() {
         .run();
 }
 
+#[derive(Component)]
+struct Sun;
+
 fn setup(
     mut commands: Commands,
     config: Res<Config>,
@@ -140,13 +144,14 @@ fn setup(
     });
 
     commands.spawn((
+        Sun,
         DirectionalLight {
-            shadows_enabled: config.environment.light.shadows_enabled,
-            illuminance: config.environment.light.illuminance,
+            shadows_enabled: config.environment.sun.shadows_enabled,
+            illuminance: config.environment.sun.illuminance,
             ..default()
         },
-        Transform::from_translation(config.environment.light.position.into())
-            .looking_at(config.environment.light.target.into(), Vec3::Y),
+        Transform::from_translation(config.environment.sun.position.into())
+            .looking_at(config.environment.sun.target.into(), Vec3::Y),
     ));
 
     // Build the animation graph
