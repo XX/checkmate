@@ -22,7 +22,14 @@ pub fn setup(
     let scene = scenes
         .game
         .entry(SceneKey::Terrain)
-        .or_insert_with(|| asset_server.load(GltfAssetLabel::Scene(0).from_asset(config.game.terrain.model.clone())))
+        .or_insert_with(|| {
+            let model_path = config.game.terrain.model.clone();
+            if model_path.ends_with(".gltf") || model_path.ends_with(".glb") {
+                asset_server.load(GltfAssetLabel::Scene(0).from_asset(model_path))
+            } else {
+                asset_server.load(model_path)
+            }
+        })
         .clone();
     let terrain_id = commands
         .spawn((Terrain, SceneRoot(scene.clone()), config.game.terrain.get_transform()))

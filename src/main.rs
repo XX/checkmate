@@ -22,6 +22,7 @@ use bevy::state::condition::in_state;
 use bevy::state::state::{NextState, OnEnter, OnExit};
 use bevy::transform::components::Transform;
 use bevy::window::Window;
+use bevy_obj::ObjPlugin;
 use clap::Parser;
 
 use crate::camera::{AppCameraParams, AppCameraPlugin, LookingAt};
@@ -103,9 +104,7 @@ fn main() {
         })
         .insert_resource(config)
         .insert_resource(Scenes::default())
-        .add_plugins(DefaultPlugins)
-        .add_plugins(DiagnosticsPlugin)
-        .add_plugins(AppCameraPlugin)
+        .add_plugins((DefaultPlugins, ObjPlugin, DiagnosticsPlugin, AppCameraPlugin))
         .init_state::<AppState>()
         .add_systems(Startup, setup)
         .add_systems(

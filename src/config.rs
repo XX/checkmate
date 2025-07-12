@@ -5,7 +5,7 @@ use bevy::color::Color;
 use bevy::core_pipeline::auto_exposure::AutoExposure;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::resource::Resource;
-use bevy::math::Vec3;
+use bevy::math::{Quat, Vec3};
 use bevy::pbr::AmbientLight;
 use bevy::pbr::light_consts::lux;
 use bevy::transform::components::Transform;
@@ -69,6 +69,12 @@ impl GameSettings {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct Rotation {
+    pub from: [f32; 3],
+    pub to: [f32; 3],
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct TerrainSettings {
@@ -77,6 +83,9 @@ pub struct TerrainSettings {
 
     #[serde(default)]
     pub position: [f32; 3],
+
+    #[serde(default)]
+    pub rotation: Option<Rotation>,
 
     #[serde(default = "TerrainSettings::default_scale")]
     pub scale: f32,
@@ -87,6 +96,7 @@ impl Default for TerrainSettings {
         Self {
             model: Default::default(),
             position: Default::default(),
+            rotation: None,
             scale: Self::default_scale(),
         }
     }
@@ -98,7 +108,13 @@ impl TerrainSettings {
     }
 
     pub fn get_transform(&self) -> Transform {
-        Transform::from_translation(self.position.into()).with_scale(Vec3::splat(self.scale))
+        if let Some(rotation) = self.rotation {
+            Transform::from_rotation(Quat::from_rotation_arc(rotation.from.into(), rotation.to.into()))
+        } else {
+            Transform::default()
+        }
+        .with_translation(self.position.into())
+        .with_scale(Vec3::splat(self.scale))
     }
 }
 
