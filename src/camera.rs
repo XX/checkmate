@@ -227,6 +227,15 @@ pub fn preset_toggle(
         if keyboard_input.just_pressed(KeyCode::Digit2) {
             preset_idx = Some(1);
         }
+        if keyboard_input.just_pressed(KeyCode::Digit3) {
+            preset_idx = Some(2);
+        }
+        if keyboard_input.just_pressed(KeyCode::Digit4) {
+            preset_idx = Some(3);
+        }
+        if keyboard_input.just_pressed(KeyCode::Digit5) {
+            preset_idx = Some(4);
+        }
 
         if let Some(preset) = preset_idx.and_then(|idx| config.camera.presets.get(idx))
             && let Some((mut camera_target, follower)) = camera_query.iter_mut().next()
