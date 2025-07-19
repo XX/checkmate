@@ -11,7 +11,7 @@ use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::system::{Commands, Query, Res, ResMut};
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
-use bevy::math::{Dir3, FloatPow, Vec3};
+use bevy::math::{Dir3, Vec3};
 use bevy::pbr::{Atmosphere, AtmosphereSettings};
 use bevy::render::camera::{Camera, ClearColorConfig, Exposure, PerspectiveProjection, Projection};
 use bevy::transform::components::Transform;
@@ -252,9 +252,9 @@ pub fn follow_move(
                     target.rotation = delta_rotation * target.rotation;
                 }
 
-                let focus = followee_transform.translation;
-                camera.focus = focus;
-                target.focus = focus;
+                let delta_focus = followee_transform.translation - followee_prev_transform.0.translation;
+                target.focus += delta_focus;
+                camera.focus += delta_focus;
                 camera.update_position(&mut transform);
             }
         }
