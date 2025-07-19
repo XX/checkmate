@@ -17,7 +17,7 @@ use bevy::render::camera::{Camera, ClearColorConfig, Exposure, PerspectiveProjec
 use bevy::transform::components::Transform;
 
 use crate::camera::panorbit::{PanOrbitCamera, PanOrbitCameraTarget};
-use crate::config::CameraFollowSettings;
+use crate::config::{CameraSettings, Config};
 use crate::follow::{Followee, Follower, PreviousTransform};
 
 pub mod panorbit;
@@ -38,7 +38,7 @@ pub struct AppCameraEntity {
 pub struct AppCameraParams {
     pub smoothness_speed: f32,
     pub clear_color: ClearColorConfig,
-    pub translate: Vec3,
+    pub position: Vec3,
     pub look_at: LookingAt,
     pub exposure: Exposure,
     pub auto_exposure: Option<AutoExposure>,
@@ -52,7 +52,7 @@ impl Default for AppCameraParams {
         Self {
             smoothness_speed: 8.0,
             clear_color: ClearColorConfig::None,
-            translate: Vec3::ZERO,
+            position: Vec3::ZERO,
             look_at: LookingAt {
                 target: Vec3::ZERO,
                 up: Dir3::Y,
@@ -83,7 +83,7 @@ impl AppCameraParams {
     }
 
     pub fn width_translate(mut self, translate: Vec3) -> Self {
-        self.translate = translate;
+        self.position = translate;
         self
     }
 
@@ -137,9 +137,8 @@ impl Plugin for AppCameraPlugin {
 }
 
 pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
-    let focus = params.look_at.target;
-    let radius = (params.translate - focus).length();
-    let transform = Transform::from_translation(params.translate).looking_at(params.look_at.target, params.look_at.up);
+    let target = PanOrbitCameraTarget::new(params.position, params.look_at);
+    let transform = Transform::from_translation(params.position).with_rotation(target.rotation);
 
     let mut entity = commands.spawn((
         Camera3d::default(),
@@ -153,17 +152,13 @@ pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
             ..Default::default()
         }),
         PanOrbitCamera {
-            radius,
-            focus,
+            radius: target.radius,
+            focus: target.focus,
             ..Default::default()
         },
-        PanOrbitCameraTarget {
-            focus,
-            radius,
-            rotation: transform.rotation,
-        },
-        params.follower,
+        target,
         transform,
+        params.follower,
         // The directional light illuminance used in this scene
         // (the one recommended for use with this feature) is
         // quite bright, so raising the exposure compensation helps
@@ -192,22 +187,66 @@ pub fn respawn_panorbit(
     mut commands: Commands,
     mut params: ResMut<AppCameraParams>,
     camera: Entity,
-    settings: &CameraFollowSettings,
+    settings: &CameraSettings,
     height: f32,
 ) {
     commands.entity(camera).despawn();
 
-    let height = height + settings.height;
-    let x = settings.distance / 3.0;
-    let y = x / 2.0;
-    let z = settings.distance * 31_f32.sqrt() / 6.0;
-    let translate = Vec3::new(x, height + y, z);
-    let target = Vec3::ZERO.with_y(height);
+    let (position, target) = if let Some(preset) = settings.presets.first() {
+        let (position, target) = preset.to_vec3s();
+        let additional_translate = Vec3::ZERO.with_y(height);
 
-    params.translate = translate;
+        (position + additional_translate, target + additional_translate)
+    } else {
+        let x = settings.follow.distance / 3.0;
+        let y = x / 2.0;
+        let z = settings.follow.distance * 31_f32.sqrt() / 6.0;
+        let position = Vec3::new(x, y, z);
+        let additional_translate = Vec3::ZERO.with_y(height + settings.follow.height);
+
+        (position + additional_translate, additional_translate)
+    };
+
+    params.position = position;
     params.look_at.target = target;
 
     spawn_panorbit(commands, params.into());
+}
+
+pub fn preset_toggle(
+    config: Res<Config>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    followee_query: Query<&Transform, With<Followee>>,
+    mut camera_query: Query<(&mut PanOrbitCameraTarget, &Follower), With<PanOrbitCamera>>,
+) {
+    if keyboard_input.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
+        let mut preset_idx = None;
+        if keyboard_input.just_pressed(KeyCode::Digit1) {
+            preset_idx = Some(0);
+        }
+        if keyboard_input.just_pressed(KeyCode::Digit2) {
+            preset_idx = Some(1);
+        }
+
+        if let Some(preset) = preset_idx.and_then(|idx| config.camera.presets.get(idx))
+            && let Some((mut camera_target, follower)) = camera_query.iter_mut().next()
+        {
+            let (position, target) = preset.to_vec3s();
+
+            let additional_transform = follower
+                .followee
+                .and_then(|followee_entity| followee_query.get(followee_entity).ok())
+                .map(|followe_transform| followe_transform.clone())
+                .unwrap_or(Transform::from_translation(camera_target.focus));
+
+            let mut target = PanOrbitCameraTarget::new(position, LookingAt { target, up: Dir3::Y });
+
+            let delta_rotation = additional_transform.rotation;
+            target.rotation = delta_rotation * target.rotation;
+            target.focus += additional_transform.translation;
+            *camera_target = target;
+        }
+    }
 }
 
 pub fn follow_toggle(

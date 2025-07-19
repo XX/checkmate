@@ -1,3 +1,5 @@
+use std::f32::consts;
+
 use bevy::ecs::component::Component;
 use bevy::ecs::event::EventReader;
 use bevy::ecs::system::{Query, Res};
@@ -9,7 +11,9 @@ use bevy::time::Time;
 use bevy::transform::components::Transform;
 use bevy::window::Window;
 
-#[derive(Component, Copy, Clone, Debug)]
+use crate::camera::LookingAt;
+
+#[derive(Component, Clone, Debug)]
 pub struct PanOrbitCameraTarget {
     pub focus: Vec3,
     pub radius: f32,
@@ -22,6 +26,20 @@ impl Default for PanOrbitCameraTarget {
             focus: Vec3::ZERO,
             radius: 5.0,
             rotation: Quat::IDENTITY,
+        }
+    }
+}
+
+impl PanOrbitCameraTarget {
+    pub fn new(position: Vec3, look_at: LookingAt) -> Self {
+        let focus = look_at.target;
+        let radius = (position - focus).length();
+        let transform = Transform::from_translation(position).looking_at(look_at.target, look_at.up);
+
+        PanOrbitCameraTarget {
+            focus,
+            radius,
+            rotation: transform.rotation,
         }
     }
 }
@@ -57,7 +75,6 @@ impl PanOrbitCamera {
     }
 }
 
-/// Pan the camera with middle mouse click, zoom with scroll wheel, orbit with right mouse click.
 pub fn update_input(
     windows: Query<&Window>,
     mut motion_events: EventReader<MouseMotion>,
@@ -101,10 +118,10 @@ pub fn update_input(
         if rotation_move.length_squared() > 0.0 {
             let window = get_window_size(primary_window);
             let delta_x = {
-                let delta = rotation_move.x / window.x * std::f32::consts::PI * 2.0;
+                let delta = rotation_move.x / window.x * consts::PI * 2.0;
                 if camera.upside_down { -delta } else { delta }
             };
-            let delta_y = rotation_move.y / window.y * std::f32::consts::PI;
+            let delta_y = rotation_move.y / window.y * consts::PI;
             let yaw = Quat::from_rotation_y(-delta_x);
             let pitch = Quat::from_rotation_x(-delta_y);
 

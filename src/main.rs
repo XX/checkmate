@@ -119,6 +119,7 @@ fn main() {
                 camera::follow_toggle,
                 camera::follow_move,
                 follow::update_previous_transform,
+                camera::preset_toggle,
             )
                 .chain()
                 .run_if(in_state(AppState::InGame)),

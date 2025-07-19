@@ -60,13 +60,7 @@ pub fn setup(
 
     camera_params.follower.followee = Some(entity_id);
 
-    camera::respawn_panorbit(
-        commands,
-        camera_params,
-        camera.entity_id,
-        &config.camera.follow,
-        altitude,
-    );
+    camera::respawn_panorbit(commands, camera_params, camera.entity_id, &config.camera, altitude);
 }
 
 pub fn cleanup(

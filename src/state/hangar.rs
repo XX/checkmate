@@ -53,7 +53,7 @@ pub fn setup(
         materials: vec![],
     });
 
-    camera::respawn_panorbit(commands, camera_params, camera.entity_id, &config.camera.follow, height);
+    camera::respawn_panorbit(commands, camera_params, camera.entity_id, &config.camera, height);
 }
 
 pub fn cleanup(

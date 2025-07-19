@@ -110,7 +110,10 @@ impl TerrainSettings {
 
     pub fn get_transform(&self) -> Transform {
         if let Some(rotation) = self.rotation {
-            Transform::from_rotation(Quat::from_rotation_arc(rotation.from.into(), rotation.to.into()))
+            Transform::from_rotation(Quat::from_rotation_arc(
+                Vec3::from(rotation.from).normalize(),
+                Vec3::from(rotation.to).normalize(),
+            ))
         } else {
             Transform::default()
         }
@@ -261,6 +264,9 @@ pub struct CameraSettings {
     pub exposure: f32,
 
     #[serde(default)]
+    pub presets: Vec<CameraPresetSettings>,
+
+    #[serde(default)]
     pub auto_exposure: AutoExposureSettings,
 
     #[serde(default)]
@@ -268,6 +274,24 @@ pub struct CameraSettings {
 
     #[serde(default)]
     pub follow: CameraFollowSettings,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CameraPresetSettings {
+    #[serde(default)]
+    pub position: [f32; 3],
+
+    #[serde(default)]
+    pub target: [f32; 3],
+}
+
+impl CameraPresetSettings {
+    pub fn to_vec3s(&self) -> (Vec3, Vec3) {
+        let position = Vec3::from(self.position);
+        let target = Vec3::from(self.target);
+        (position, target)
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
