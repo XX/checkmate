@@ -50,6 +50,13 @@ impl Default for PanOrbitCamera {
     }
 }
 
+impl PanOrbitCamera {
+    pub fn update_position(&self, transform: &mut Transform) {
+        let rot_matrix = Mat3::from_quat(transform.rotation);
+        transform.translation = self.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, self.radius));
+    }
+}
+
 /// Pan the camera with middle mouse click, zoom with scroll wheel, orbit with right mouse click.
 pub fn update_input(
     windows: Query<&Window>,
@@ -143,9 +150,7 @@ pub fn interpolate_camera(
         // Interpolate rotation
         transform.rotation = transform.rotation.slerp(target.rotation, lerp_factor);
 
-        // Update camera position
-        let rot_matrix = Mat3::from_quat(transform.rotation);
-        transform.translation = camera.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, camera.radius));
+        camera.update_position(&mut transform);
     }
 }
 

@@ -12,7 +12,7 @@ use bevy::ecs::system::{Commands, Query, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
-use bevy::math::{Dir3, Vec3};
+use bevy::math::Vec3;
 use bevy::pbr::{Atmosphere, AtmosphereSettings, DirectionalLight, DirectionalLightShadowMap};
 use bevy::prelude::{AnimationGraph, AnimationNodeIndex, Entity, default};
 use bevy::reflect::Reflect;
@@ -25,7 +25,7 @@ use bevy::window::Window;
 use bevy_obj::ObjPlugin;
 use clap::Parser;
 
-use crate::camera::{AppCameraParams, AppCameraPlugin, LookingAt};
+use crate::camera::{AppCameraParams, AppCameraPlugin};
 use crate::config::Config;
 use crate::diagnostics::DiagnosticsPlugin;
 use crate::state::{AppState, Scenes, hangar, ingame};
@@ -34,11 +34,9 @@ mod camera;
 mod cli;
 mod config;
 mod diagnostics;
+mod follow;
 mod state;
 mod utils;
-
-pub const LANDSCAPE_SIZE: f32 = 1200.0;
-pub const LANDSCAPE_SIZE_HALF: f32 = LANDSCAPE_SIZE * 0.5;
 
 #[derive(Resource, Reflect)]
 pub struct PlaneSettings {
@@ -64,12 +62,8 @@ fn main() {
 
     let camera_params = AppCameraParams::default()
         .with_smoothness_speed(8.0)
-        .width_translate(Vec3::new(-3.0, 5.0, 15.0))
-        .width_look_at(LookingAt {
-            target: Vec3::ZERO.with_y(2.31),
-            up: Dir3::Y,
-        })
-        .with_tonemapping(config.camera.tonemap);
+        .with_tonemapping(config.camera.tonemap)
+        .with_follower(config.camera.follow.to_follower());
 
     let camera_params = if config.environment.atmosphere.enabled {
         camera_params
@@ -115,6 +109,19 @@ fn main() {
         .add_systems(
             OnEnter(AppState::InGame),
             (ingame::setup, ingame::terrain::setup.after(ingame::setup)),
+        )
+        .add_systems(
+            Update,
+            (
+                ingame::aircraft::update_thrust,
+                ingame::aircraft::movement,
+                ingame::aircraft::rotation,
+                camera::follow_toggle,
+                camera::follow_move,
+                follow::update_previous_transform,
+            )
+                .chain()
+                .run_if(in_state(AppState::InGame)),
         )
         .add_systems(OnExit(AppState::InGame), ingame::cleanup)
         .add_systems(Update, state::change)

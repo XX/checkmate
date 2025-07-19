@@ -1,5 +1,4 @@
 use bevy::asset::{AssetServer, Assets, Handle};
-use bevy::ecs::component::Component;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Commands, Res, ResMut};
@@ -12,15 +11,12 @@ use bevy::transform::components::Transform;
 
 use crate::camera::{self, AppCameraEntity, AppCameraParams};
 use crate::config::Config;
+use crate::follow::{Followee, PreviousTransform};
+use crate::state::ingame::aircraft::{Aircraft, Movement, Thrust};
 use crate::state::{SceneKey, Scenes};
 
+pub mod aircraft;
 pub mod terrain;
-
-#[derive(Component)]
-pub struct PlaneMovement {
-    target_pos: Vec3,
-    timer: f32,
-}
 
 #[derive(Default, Resource)]
 pub struct GameData {
@@ -35,7 +31,7 @@ pub fn setup(
     asset_server: Res<AssetServer>,
     mut scenes: ResMut<Scenes>,
     camera: Res<AppCameraEntity>,
-    camera_params: ResMut<AppCameraParams>,
+    mut camera_params: ResMut<AppCameraParams>,
 ) {
     let scene = scenes
         .game
@@ -44,14 +40,16 @@ pub fn setup(
         .clone();
 
     let altitude = config.game.flight_altitude;
+    let transform = Transform::from_translation(Vec3::ZERO.with_y(altitude));
     let entity_id = commands
         .spawn((
-            PlaneMovement {
-                target_pos: Vec3::ZERO,
-                timer: 0.0,
-            },
+            Aircraft::new(),
+            Thrust::new(),
+            Movement::default(),
+            Followee,
             SceneRoot(scene),
-            Transform::from_translation(Vec3::ZERO.with_y(altitude)),
+            PreviousTransform(transform.clone()),
+            transform,
         ))
         .id();
 
@@ -60,12 +58,14 @@ pub fn setup(
         ..Default::default()
     });
 
+    camera_params.follower.followee = Some(entity_id);
+
     camera::respawn_panorbit(
         commands,
-        camera_params.into(),
+        camera_params,
         camera.entity_id,
-        Vec3::new(-3.0, altitude + 5.0, 15.0),
-        Vec3::ZERO.with_y(altitude),
+        &config.camera.follow,
+        altitude,
     );
 }
 

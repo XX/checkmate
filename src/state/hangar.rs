@@ -53,13 +53,7 @@ pub fn setup(
         materials: vec![],
     });
 
-    camera::respawn_panorbit(
-        commands,
-        camera_params.into(),
-        camera.entity_id,
-        Vec3::new(-3.0, height + 5.0, 15.0),
-        Vec3::ZERO.with_y(height),
-    );
+    camera::respawn_panorbit(commands, camera_params, camera.entity_id, &config.camera.follow, height);
 }
 
 pub fn cleanup(

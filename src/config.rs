@@ -15,6 +15,7 @@ use config_load::{ConfigLoader, FileLocation, Load};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
+use crate::follow::Follower;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
@@ -264,6 +265,9 @@ pub struct CameraSettings {
 
     #[serde(default)]
     pub tonemap: Tonemap,
+
+    #[serde(default)]
+    pub follow: CameraFollowSettings,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -341,6 +345,46 @@ impl Tonemap {
 impl From<Tonemap> for Tonemapping {
     fn from(value: Tonemap) -> Self {
         value.to_tonemapping()
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CameraFollowSettings {
+    #[serde(default = "CameraFollowSettings::default_distance")]
+    pub distance: f32,
+
+    #[serde(default = "CameraFollowSettings::default_height")]
+    pub height: f32,
+
+    #[serde(default)]
+    pub turn_towards: bool,
+}
+
+impl Default for CameraFollowSettings {
+    fn default() -> Self {
+        Self {
+            distance: Self::default_distance(),
+            height: Self::default_height(),
+            turn_towards: false,
+        }
+    }
+}
+
+impl CameraFollowSettings {
+    pub const fn default_distance() -> f32 {
+        15.0
+    }
+
+    pub const fn default_height() -> f32 {
+        5.0
+    }
+
+    pub fn to_follower(&self) -> Follower {
+        Follower {
+            turn_towards: self.turn_towards,
+            ..Default::default()
+        }
     }
 }
 
