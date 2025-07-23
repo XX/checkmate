@@ -116,6 +116,7 @@ fn main() {
                 ingame::aircraft::update_thrust,
                 ingame::aircraft::movement,
                 ingame::aircraft::rotation,
+                ingame::control_animations,
                 camera::follow_toggle,
                 camera::follow_move,
                 follow::update_previous_transform,
@@ -168,9 +169,13 @@ fn setup(
     let mut graph = AnimationGraph::new();
     let animations = graph
         .add_clips(
-            [GltfAssetLabel::Animation(0).from_asset(config.game.hangar_model.clone())]
-                .into_iter()
-                .map(|path| asset_server.load(path)),
+            [
+                GltfAssetLabel::Animation(0).from_asset(config.game.hangar_model.clone()),
+                GltfAssetLabel::Animation(0).from_asset(config.game.flying_model.clone()),
+                GltfAssetLabel::Animation(1).from_asset(config.game.flying_model.clone()),
+            ]
+            .into_iter()
+            .map(|path| asset_server.load(path)),
             1.0,
             graph.root,
         )
