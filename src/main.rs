@@ -15,7 +15,6 @@ use bevy::input::keyboard::KeyCode;
 use bevy::math::Vec3;
 use bevy::pbr::{Atmosphere, AtmosphereSettings, DirectionalLight, DirectionalLightShadowMap};
 use bevy::prelude::{AnimationGraph, AnimationNodeIndex, Entity, default};
-use bevy::reflect::Reflect;
 use bevy::render::camera::{ClearColorConfig, Exposure};
 use bevy::state::app::AppExtStates;
 use bevy::state::condition::in_state;
@@ -37,21 +36,6 @@ mod diagnostics;
 mod follow;
 mod state;
 mod utils;
-
-#[derive(Resource, Reflect)]
-pub struct PlaneSettings {
-    wobble_speed: f32,
-    rotation_speed: f32,
-    move_interval: f32,
-    box_area: f32,
-    speed: f32,
-}
-
-#[derive(Resource)]
-struct Animations {
-    animations: Vec<AnimationNodeIndex>,
-    graph: Handle<AnimationGraph>,
-}
 
 fn main() {
     let opts: cli::Opts = cli::Opts::parse();
@@ -139,6 +123,22 @@ fn main() {
 #[derive(Component)]
 struct Sun;
 
+#[derive(Resource)]
+struct Animations {
+    animations: Vec<AnimationNodeIndex>,
+    graph: Handle<AnimationGraph>,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(usize)]
+pub enum AnimationKind {
+    Gears = 0,
+    PitchUp,
+    PitchDown,
+    YawLeft,
+    YawRight,
+}
+
 fn setup(
     mut commands: Commands,
     config: Res<Config>,
@@ -146,14 +146,6 @@ fn setup(
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
-    commands.insert_resource(PlaneSettings {
-        move_interval: 1.3,
-        box_area: 6.0,
-        speed: 1.5,
-        wobble_speed: 5.0,
-        rotation_speed: 0.7,
-    });
-
     commands.spawn((
         Sun,
         DirectionalLight {

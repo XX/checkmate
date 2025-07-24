@@ -13,12 +13,12 @@ use bevy::render::mesh::Mesh;
 use bevy::scene::SceneRoot;
 use bevy::transform::components::Transform;
 
-use crate::Animations;
 use crate::camera::{self, AppCameraEntity, AppCameraParams};
 use crate::config::Config;
 use crate::follow::{Followee, PreviousTransform};
 use crate::state::ingame::aircraft::{Aircraft, Movement, Thrust};
 use crate::state::{SceneKey, Scenes};
+use crate::{AnimationKind, Animations};
 
 pub mod aircraft;
 pub mod terrain;
@@ -87,16 +87,6 @@ pub fn cleanup(
     }
 
     commands.remove_resource::<GameData>();
-}
-
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(usize)]
-pub enum AnimationKind {
-    Gears = 0,
-    PitchUp,
-    PitchDown,
-    YawLeft,
-    YawRight,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
