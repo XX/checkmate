@@ -93,6 +93,8 @@ pub fn cleanup(
 #[repr(usize)]
 pub enum AnimationKind {
     Gears = 0,
+    PitchUp,
+    PitchDown,
     YawLeft,
     YawRight,
 }
@@ -106,9 +108,19 @@ pub enum YawState {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum PitchState {
+    Up,
+    Down,
+    #[default]
+    Middle,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct AnimationData {
     pub current_yaw: YawState,
     pub next_yaw: YawState,
+    pub current_pitch: PitchState,
+    pub next_pitch: PitchState,
 }
 
 pub fn control_animations(
@@ -125,6 +137,8 @@ pub fn control_animations(
 
     let to_left_pressed = keyboard_input.pressed(KeyCode::KeyA);
     let to_right_pressed = keyboard_input.pressed(KeyCode::KeyD);
+    let to_up_pressed = keyboard_input.pressed(KeyCode::ArrowUp);
+    let to_down_pressed = keyboard_input.pressed(KeyCode::ArrowDown);
 
     if (to_left_pressed && to_right_pressed) || (!to_left_pressed && !to_right_pressed) {
         data.next_yaw = YawState::Center;
@@ -132,6 +146,14 @@ pub fn control_animations(
         data.next_yaw = YawState::Left;
     } else if to_right_pressed {
         data.next_yaw = YawState::Right;
+    }
+
+    if (to_up_pressed && to_down_pressed) || (!to_up_pressed && !to_down_pressed) {
+        data.next_pitch = PitchState::Middle;
+    } else if to_up_pressed {
+        data.next_pitch = PitchState::Up;
+    } else if to_down_pressed {
+        data.next_pitch = PitchState::Down;
     }
 
     if let Some(mut player) = animation_players.iter_mut().next() {
@@ -177,6 +199,59 @@ pub fn control_animations(
                     data.current_yaw = YawState::Center;
 
                     let animation_node = &animation_graph[right_animation_node];
+                    let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
+                        animation_clips
+                            .get(clip_handle)
+                            .map(|clip| clip.duration())
+                            .unwrap_or_default()
+                    } else {
+                        0.0
+                    };
+                    player.adjust_speeds(-1.0);
+                    player.seek_all_by(animation_start_time);
+                },
+                _ => (),
+            }
+        }
+
+        if data.current_pitch != data.next_pitch {
+            let up_animation_node = animations.animations[AnimationKind::PitchUp as usize];
+            let down_animation_node = animations.animations[AnimationKind::PitchDown as usize];
+
+            match (data.current_pitch, data.next_pitch) {
+                (PitchState::Middle, PitchState::Up) => {
+                    if !player.is_playing_animation(down_animation_node) {
+                        player.play(up_animation_node);
+                        data.current_pitch = PitchState::Up;
+                    }
+                },
+                (PitchState::Middle, PitchState::Down) => {
+                    if !player.is_playing_animation(up_animation_node) {
+                        player.play(down_animation_node);
+                        data.current_pitch = PitchState::Down;
+                    }
+                },
+                (PitchState::Up, PitchState::Middle | PitchState::Down) => {
+                    player.play(up_animation_node);
+                    data.current_pitch = PitchState::Middle;
+
+                    let animation_node = &animation_graph[up_animation_node];
+                    let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
+                        animation_clips
+                            .get(clip_handle)
+                            .map(|clip| clip.duration())
+                            .unwrap_or_default()
+                    } else {
+                        0.0
+                    };
+                    player.adjust_speeds(-1.0);
+                    player.seek_all_by(animation_start_time);
+                },
+                (PitchState::Down, PitchState::Middle | PitchState::Up) => {
+                    player.play(down_animation_node);
+                    data.current_pitch = PitchState::Middle;
+
+                    let animation_node = &animation_graph[down_animation_node];
                     let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
                         animation_clips
                             .get(clip_handle)

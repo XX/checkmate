@@ -173,6 +173,8 @@ fn setup(
                 GltfAssetLabel::Animation(0).from_asset(config.game.hangar_model.clone()),
                 GltfAssetLabel::Animation(0).from_asset(config.game.flying_model.clone()),
                 GltfAssetLabel::Animation(1).from_asset(config.game.flying_model.clone()),
+                GltfAssetLabel::Animation(2).from_asset(config.game.flying_model.clone()),
+                GltfAssetLabel::Animation(3).from_asset(config.game.flying_model.clone()),
             ]
             .into_iter()
             .map(|path| asset_server.load(path)),
