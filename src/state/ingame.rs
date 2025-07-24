@@ -1,4 +1,4 @@
-use bevy::animation::graph::{AnimationGraph, AnimationNodeType};
+use bevy::animation::graph::{AnimationGraph, AnimationNodeIndex, AnimationNodeType};
 use bevy::animation::{AnimationClip, AnimationPlayer};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::ecs::entity::Entity;
@@ -100,27 +100,19 @@ pub enum AnimationKind {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum YawState {
-    Left,
-    Right,
+pub enum RotateState {
+    SideA,
+    SideB,
     #[default]
-    Center,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum PitchState {
-    Up,
-    Down,
-    #[default]
-    Middle,
+    Origin,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct AnimationData {
-    pub current_yaw: YawState,
-    pub next_yaw: YawState,
-    pub current_pitch: PitchState,
-    pub next_pitch: PitchState,
+    pub current_yaw: RotateState,
+    pub next_yaw: RotateState,
+    pub current_pitch: RotateState,
+    pub next_pitch: RotateState,
 }
 
 pub fn control_animations(
@@ -141,19 +133,19 @@ pub fn control_animations(
     let to_down_pressed = keyboard_input.pressed(KeyCode::ArrowDown);
 
     if (to_left_pressed && to_right_pressed) || (!to_left_pressed && !to_right_pressed) {
-        data.next_yaw = YawState::Center;
+        data.next_yaw = RotateState::Origin;
     } else if to_left_pressed {
-        data.next_yaw = YawState::Left;
+        data.next_yaw = RotateState::SideA;
     } else if to_right_pressed {
-        data.next_yaw = YawState::Right;
+        data.next_yaw = RotateState::SideB;
     }
 
     if (to_up_pressed && to_down_pressed) || (!to_up_pressed && !to_down_pressed) {
-        data.next_pitch = PitchState::Middle;
+        data.next_pitch = RotateState::Origin;
     } else if to_up_pressed {
-        data.next_pitch = PitchState::Up;
+        data.next_pitch = RotateState::SideA;
     } else if to_down_pressed {
-        data.next_pitch = PitchState::Down;
+        data.next_pitch = RotateState::SideB;
     }
 
     if let Some(mut player) = animation_players.iter_mut().next() {
@@ -162,109 +154,104 @@ pub fn control_animations(
         }
 
         if data.current_yaw != data.next_yaw {
-            let left_animation_node = animations.animations[AnimationKind::YawLeft as usize];
-            let right_animation_node = animations.animations[AnimationKind::YawRight as usize];
+            let left_animation_idx = animations.animations[AnimationKind::YawLeft as usize];
+            let right_animation_idx = animations.animations[AnimationKind::YawRight as usize];
 
-            match (data.current_yaw, data.next_yaw) {
-                (YawState::Center, YawState::Left) => {
-                    if !player.is_playing_animation(right_animation_node) {
-                        player.play(left_animation_node);
-                        data.current_yaw = YawState::Left;
-                    }
-                },
-                (YawState::Center, YawState::Right) => {
-                    if !player.is_playing_animation(left_animation_node) {
-                        player.play(right_animation_node);
-                        data.current_yaw = YawState::Right;
-                    }
-                },
-                (YawState::Left, YawState::Center | YawState::Right) => {
-                    player.play(left_animation_node);
-                    data.current_yaw = YawState::Center;
-
-                    let animation_node = &animation_graph[left_animation_node];
-                    let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
-                        animation_clips
-                            .get(clip_handle)
-                            .map(|clip| clip.duration())
-                            .unwrap_or_default()
-                    } else {
-                        0.0
-                    };
-                    player.adjust_speeds(-1.0);
-                    player.seek_all_by(animation_start_time);
-                },
-                (YawState::Right, YawState::Center | YawState::Left) => {
-                    player.play(right_animation_node);
-                    data.current_yaw = YawState::Center;
-
-                    let animation_node = &animation_graph[right_animation_node];
-                    let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
-                        animation_clips
-                            .get(clip_handle)
-                            .map(|clip| clip.duration())
-                            .unwrap_or_default()
-                    } else {
-                        0.0
-                    };
-                    player.adjust_speeds(-1.0);
-                    player.seek_all_by(animation_start_time);
-                },
-                _ => (),
+            if let Some(new_state) = switch_rotate_animation(
+                &mut player,
+                &animation_graph,
+                &animation_clips,
+                left_animation_idx,
+                right_animation_idx,
+                data.current_yaw,
+                data.next_yaw,
+            ) {
+                data.current_yaw = new_state;
             }
         }
 
         if data.current_pitch != data.next_pitch {
-            let up_animation_node = animations.animations[AnimationKind::PitchUp as usize];
-            let down_animation_node = animations.animations[AnimationKind::PitchDown as usize];
+            let up_animation_idx = animations.animations[AnimationKind::PitchUp as usize];
+            let down_animation_idx = animations.animations[AnimationKind::PitchDown as usize];
 
-            match (data.current_pitch, data.next_pitch) {
-                (PitchState::Middle, PitchState::Up) => {
-                    if !player.is_playing_animation(down_animation_node) {
-                        player.play(up_animation_node);
-                        data.current_pitch = PitchState::Up;
-                    }
-                },
-                (PitchState::Middle, PitchState::Down) => {
-                    if !player.is_playing_animation(up_animation_node) {
-                        player.play(down_animation_node);
-                        data.current_pitch = PitchState::Down;
-                    }
-                },
-                (PitchState::Up, PitchState::Middle | PitchState::Down) => {
-                    player.play(up_animation_node);
-                    data.current_pitch = PitchState::Middle;
-
-                    let animation_node = &animation_graph[up_animation_node];
-                    let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
-                        animation_clips
-                            .get(clip_handle)
-                            .map(|clip| clip.duration())
-                            .unwrap_or_default()
-                    } else {
-                        0.0
-                    };
-                    player.adjust_speeds(-1.0);
-                    player.seek_all_by(animation_start_time);
-                },
-                (PitchState::Down, PitchState::Middle | PitchState::Up) => {
-                    player.play(down_animation_node);
-                    data.current_pitch = PitchState::Middle;
-
-                    let animation_node = &animation_graph[down_animation_node];
-                    let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
-                        animation_clips
-                            .get(clip_handle)
-                            .map(|clip| clip.duration())
-                            .unwrap_or_default()
-                    } else {
-                        0.0
-                    };
-                    player.adjust_speeds(-1.0);
-                    player.seek_all_by(animation_start_time);
-                },
-                _ => (),
+            if let Some(new_state) = switch_rotate_animation(
+                &mut player,
+                &animation_graph,
+                &animation_clips,
+                up_animation_idx,
+                down_animation_idx,
+                data.current_pitch,
+                data.next_pitch,
+            ) {
+                data.current_pitch = new_state;
             }
         }
+    }
+}
+
+fn switch_rotate_animation(
+    player: &mut AnimationPlayer,
+    animation_graph: &AnimationGraph,
+    animation_clips: &Assets<AnimationClip>,
+    side_a_animation_idx: AnimationNodeIndex,
+    side_b_animation_idx: AnimationNodeIndex,
+    current_state: RotateState,
+    next_state: RotateState,
+) -> Option<RotateState> {
+    match (current_state, next_state) {
+        (RotateState::Origin, RotateState::SideA) if !player.is_playing_animation(side_b_animation_idx) => {
+            let animation = player.play(side_a_animation_idx);
+            if animation.is_playback_reversed() {
+                animation.set_speed(-1.0 * animation.speed());
+            }
+            Some(RotateState::SideA)
+        },
+        (RotateState::Origin, RotateState::SideB) if !player.is_playing_animation(side_a_animation_idx) => {
+            let animation = player.play(side_b_animation_idx);
+            if animation.is_playback_reversed() {
+                animation.set_speed(-1.0 * animation.speed());
+            }
+
+            Some(RotateState::SideB)
+        },
+        (RotateState::SideA, RotateState::Origin | RotateState::SideB) => {
+            let animation_node = &animation_graph[side_a_animation_idx];
+            let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
+                animation_clips
+                    .get(clip_handle)
+                    .map(|clip| clip.duration())
+                    .unwrap_or_default()
+            } else {
+                0.0
+            };
+
+            let animation = player.play(side_a_animation_idx);
+            if !animation.is_playback_reversed() {
+                animation.set_speed(-1.0 * animation.speed());
+            }
+            player.seek_all_by(animation_start_time);
+
+            Some(RotateState::Origin)
+        },
+        (RotateState::SideB, RotateState::Origin | RotateState::SideA) => {
+            let animation_node = &animation_graph[side_b_animation_idx];
+            let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
+                animation_clips
+                    .get(clip_handle)
+                    .map(|clip| clip.duration())
+                    .unwrap_or_default()
+            } else {
+                0.0
+            };
+
+            let animation = player.play(side_b_animation_idx);
+            if !animation.is_playback_reversed() {
+                animation.set_speed(-1.0 * animation.speed());
+            }
+            player.seek_all_by(animation_start_time);
+
+            Some(RotateState::Origin)
+        },
+        _ => None,
     }
 }
