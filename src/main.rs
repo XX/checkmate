@@ -158,22 +158,24 @@ fn setup(
     ));
 
     // Build the animation graph
+    let mut animations = Vec::new();
     let mut graph = AnimationGraph::new();
-    let animations = graph
-        .add_clips(
-            [
-                GltfAssetLabel::Animation(0).from_asset(config.game.hangar_model.clone()),
-                GltfAssetLabel::Animation(0).from_asset(config.game.flying_model.clone()),
-                GltfAssetLabel::Animation(1).from_asset(config.game.flying_model.clone()),
-                GltfAssetLabel::Animation(2).from_asset(config.game.flying_model.clone()),
-                GltfAssetLabel::Animation(3).from_asset(config.game.flying_model.clone()),
-            ]
-            .into_iter()
-            .map(|path| asset_server.load(path)),
+
+    let animation_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset(config.game.hangar_model.clone())),
+        1.0,
+        graph.root,
+    );
+    animations.push(animation_node);
+
+    for i in 0..4 {
+        let animation_node = graph.add_clip(
+            asset_server.load(GltfAssetLabel::Animation(i).from_asset(config.game.flying_model.clone())),
             1.0,
             graph.root,
-        )
-        .collect();
+        );
+        animations.push(animation_node);
+    }
 
     // Insert a resource with the current scene information
     let graph = graphs.add(graph);

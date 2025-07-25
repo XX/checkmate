@@ -205,40 +205,40 @@ fn switch_rotate_animation(
             Some(RotateState::SideB)
         },
         (RotateState::SideA, RotateState::Origin | RotateState::SideB) => {
-            let animation_node = &animation_graph[side_a_animation_idx];
-            let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
-                animation_clips
-                    .get(clip_handle)
-                    .map(|clip| clip.duration())
-                    .unwrap_or_default()
-            } else {
-                0.0
-            };
-
             let animation = player.play(side_a_animation_idx);
             if !animation.is_playback_reversed() {
+                let animation_node = &animation_graph[side_a_animation_idx];
+                let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
+                    animation_clips
+                        .get(clip_handle)
+                        .map(|clip| clip.duration())
+                        .unwrap_or_default()
+                } else {
+                    0.0
+                };
+
                 animation.set_speed(-1.0 * animation.speed());
+                animation.seek_to(animation.seek_time() + animation_start_time);
             }
-            player.seek_all_by(animation_start_time);
 
             Some(RotateState::Origin)
         },
         (RotateState::SideB, RotateState::Origin | RotateState::SideA) => {
-            let animation_node = &animation_graph[side_b_animation_idx];
-            let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
-                animation_clips
-                    .get(clip_handle)
-                    .map(|clip| clip.duration())
-                    .unwrap_or_default()
-            } else {
-                0.0
-            };
-
             let animation = player.play(side_b_animation_idx);
             if !animation.is_playback_reversed() {
+                let animation_node = &animation_graph[side_b_animation_idx];
+                let animation_start_time = if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {
+                    animation_clips
+                        .get(clip_handle)
+                        .map(|clip| clip.duration())
+                        .unwrap_or_default()
+                } else {
+                    0.0
+                };
+
                 animation.set_speed(-1.0 * animation.speed());
+                animation.seek_to(animation.seek_time() + animation_start_time);
             }
-            player.seek_all_by(animation_start_time);
 
             Some(RotateState::Origin)
         },
