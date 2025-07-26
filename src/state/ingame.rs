@@ -60,25 +60,25 @@ pub fn setup(
         ))
         .id();
 
-    let first_player = commands
-        .spawn((AnimationPlayer::default(), Name::new("FirstPlayer")))
+    let ruddervator_left_player = commands
+        .spawn((AnimationPlayer::default(), Name::new("RuddervatorRightPlayer")))
         .id();
 
-    let second_player = commands
-        .spawn((AnimationPlayer::default(), Name::new("SecondPlayer")))
+    let ruddervator_right_player = commands
+        .spawn((AnimationPlayer::default(), Name::new("RuddervatorLeftPlayer")))
         .id();
 
     commands.insert_resource(AdditionalPlayers {
-        first_player,
-        second_player,
+        ruddervator_left_player,
+        ruddervator_right_player,
     });
 
-    commands.entity(entity_id).add_child(first_player);
-    commands.entity(entity_id).add_child(second_player);
+    commands.entity(entity_id).add_child(ruddervator_left_player);
+    commands.entity(entity_id).add_child(ruddervator_right_player);
     commands.entity(entity_id).observe(attach_animations);
 
     commands.insert_resource(GameData {
-        entities: vec![entity_id, first_player, second_player],
+        entities: vec![entity_id, ruddervator_left_player, ruddervator_right_player],
         ..Default::default()
     });
 
@@ -88,8 +88,8 @@ pub fn setup(
 
 #[derive(Resource)]
 pub struct AdditionalPlayers {
-    pub first_player: Entity,
-    pub second_player: Entity,
+    pub ruddervator_left_player: Entity,
+    pub ruddervator_right_player: Entity,
 }
 
 fn attach_animations(
@@ -101,19 +101,26 @@ fn attach_animations(
     players: Res<AdditionalPlayers>,
 ) {
     for (entity, _player) in &to_animated_entities {
-        println!("Animated: {entity}");
         commands
             .entity(entity)
             .insert(AnimationGraphHandle(animations.graph.clone()));
     }
 
     for (name, mut target) in animation_targets {
-        match name.as_str() {
-            "ruddervator_left" | "Bone.001" => target.player = players.first_player,
-            "ruddervator_right" | "Bone.002" => target.player = players.second_player,
-            _ => (),
+        let lowercased_name = name.as_str().trim().to_lowercase();
+        if lowercased_name.starts_with("ruddervator") {
+            let trimmed_name = lowercased_name
+                .trim_start_matches("ruddervator")
+                .trim_start_matches('_')
+                .trim_start_matches('-')
+                .trim_start();
+
+            if trimmed_name.starts_with("left") {
+                target.player = players.ruddervator_left_player;
+            } else if trimmed_name.starts_with("right") {
+                target.player = players.ruddervator_right_player
+            }
         }
-        println!("Name: {}, player: {}", name.as_str(), target.player);
     }
 }
 
@@ -249,7 +256,7 @@ pub fn control_animations(
             player.stop_all();
         }
 
-        if player_entity == players.first_player {
+        if player_entity == players.ruddervator_left_player {
             if data.left_ruddervator.need_update() {
                 let left_animation_idx = animations.get(AnimationKind::LeftRuddervatorTurnLeft);
                 let right_animation_idx = animations.get(AnimationKind::LeftRuddervatorTurnRight);
@@ -265,7 +272,7 @@ pub fn control_animations(
                     data.left_ruddervator = new_state;
                 }
             }
-        } else if player_entity == players.second_player {
+        } else if player_entity == players.ruddervator_right_player {
             if data.right_ruddervator.need_update() {
                 let left_animation_idx = animations.get(AnimationKind::RightRuddervatorTurnLeft);
                 let right_animation_idx = animations.get(AnimationKind::RightRuddervatorTurnRight);
