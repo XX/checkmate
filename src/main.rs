@@ -1,11 +1,8 @@
 use bevy::DefaultPlugins;
-use bevy::animation::graph::AnimationGraphHandle;
-use bevy::animation::{AnimationPlayer, animate_targets};
 use bevy::app::{App, Startup, Update};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::Color;
 use bevy::ecs::component::Component;
-use bevy::ecs::query::Added;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::system::{Commands, Query, Res, ResMut};
@@ -87,12 +84,12 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             OnEnter(AppState::Hangar),
-            (hangar::setup, hangar::chessboard_land_spawn.after(hangar::setup)),
+            (hangar::setup, hangar::chessboard_land_spawn).chain(),
         )
         .add_systems(OnExit(AppState::Hangar), hangar::cleanup)
         .add_systems(
             OnEnter(AppState::InGame),
-            (ingame::setup, ingame::terrain::setup.after(ingame::setup)),
+            (ingame::setup, ingame::terrain::setup).chain(),
         )
         .add_systems(
             Update,
@@ -111,7 +108,6 @@ fn main() {
         )
         .add_systems(OnExit(AppState::InGame), ingame::cleanup)
         .add_systems(Update, state::change)
-        .add_systems(Update, attach_animations.before(animate_targets))
         .add_systems(
             Update,
             hangar::control_land_gear_animation.run_if(in_state(AppState::Hangar)),
@@ -129,14 +125,23 @@ struct Animations {
     graph: Handle<AnimationGraph>,
 }
 
+impl Animations {
+    fn get(&self, kind: AnimationKind) -> AnimationNodeIndex {
+        self.animations[kind as usize]
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(usize)]
 pub enum AnimationKind {
     Gears = 0,
-    PitchUp,
+    LeftRuddervatorTurnLeft,
+    LeftRuddervatorTurnRight,
+    Rest,
+    RightRuddervatorTurnLeft,
+    RightRuddervatorTurnRight,
     PitchDown,
-    YawLeft,
-    YawRight,
+    PitchUp,
 }
 
 fn setup(
@@ -168,16 +173,17 @@ fn setup(
     );
     animations.push(animation_node);
 
-    for i in 0..4 {
+    let parent = graph.root;
+    let weight = 1.0;
+    for i in 0..7 {
         let animation_node = graph.add_clip(
             asset_server.load(GltfAssetLabel::Animation(i).from_asset(config.game.flying_model.clone())),
-            1.0,
-            graph.root,
+            weight,
+            parent,
         );
         animations.push(animation_node);
     }
 
-    // Insert a resource with the current scene information
     let graph = graphs.add(graph);
     commands.insert_resource(Animations {
         animations,
@@ -185,19 +191,6 @@ fn setup(
     });
 
     next_state.set(config.game.state);
-}
-
-/// Attaches the animation graph to the scene
-fn attach_animations(
-    mut commands: Commands,
-    to_animated_entities: Query<(Entity, &AnimationPlayer), Added<AnimationPlayer>>,
-    animations: Res<Animations>,
-) {
-    for (entity, _player) in &to_animated_entities {
-        commands
-            .entity(entity)
-            .insert(AnimationGraphHandle(animations.graph.clone()));
-    }
 }
 
 pub fn close_on_esc(

@@ -1,7 +1,8 @@
-use bevy::animation::graph::AnimationNodeType;
+use bevy::animation::graph::{AnimationGraphHandle, AnimationNodeType};
 use bevy::animation::{AnimationClip, AnimationPlayer};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::{Color, ColorToComponents, LinearRgba};
+use bevy::ecs::observer::Trigger;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Commands, Local, Query, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
@@ -12,7 +13,7 @@ use bevy::math::primitives::Plane3d;
 use bevy::pbr::{MeshMaterial3d, StandardMaterial};
 use bevy::prelude::{AnimationGraph, Entity, MeshBuilder};
 use bevy::render::mesh::{Mesh, Mesh3d, Meshable};
-use bevy::scene::SceneRoot;
+use bevy::scene::{SceneInstanceReady, SceneRoot};
 use bevy::transform::components::Transform;
 
 use crate::camera::{AppCameraEntity, AppCameraParams};
@@ -45,6 +46,7 @@ pub fn setup(
     let height = 2.31;
     let entity_id = commands
         .spawn((SceneRoot(scene), Transform::from_translation(Vec3::ZERO.with_y(height))))
+        .observe(attach_animations)
         .id();
 
     commands.insert_resource(HangarData {
@@ -115,6 +117,19 @@ pub fn chessboard_land_spawn(
     data.entities.push(entity_id);
     data.meshes.push(mesh);
     data.materials.push(material);
+}
+
+fn attach_animations(
+    _trigger: Trigger<SceneInstanceReady>,
+    mut commands: Commands,
+    to_animated_entities: Query<(Entity, &AnimationPlayer)>,
+    animations: Res<Animations>,
+) {
+    for (entity, _player) in &to_animated_entities {
+        commands
+            .entity(entity)
+            .insert(AnimationGraphHandle(animations.graph.clone()));
+    }
 }
 
 pub fn control_land_gear_animation(
