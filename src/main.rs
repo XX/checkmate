@@ -135,9 +135,13 @@ impl Animations {
 #[repr(usize)]
 pub enum AnimationKind {
     Gears = 0,
+    LeftElevonExternDown,
+    LeftElevonExternUp,
     LeftRuddervatorTurnLeft,
     LeftRuddervatorTurnRight,
     Rest,
+    RightElevonExternDown,
+    RightElevonExternUp,
     RightRuddervatorTurnLeft,
     RightRuddervatorTurnRight,
     PitchDown,
@@ -175,7 +179,7 @@ fn setup(
 
     let parent = graph.root;
     let weight = 1.0;
-    for i in 0..7 {
+    for i in 0..11 {
         let animation_node = graph.add_clip(
             asset_server.load(GltfAssetLabel::Animation(i).from_asset(config.game.flying_model.clone())),
             weight,

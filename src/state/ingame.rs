@@ -61,16 +61,26 @@ pub fn setup(
         .id();
 
     let ruddervator_left_player = commands
-        .spawn((AnimationPlayer::default(), Name::new("RuddervatorRightPlayer")))
+        .spawn((AnimationPlayer::default(), Name::new("RuddervatorLeftPlayer")))
         .id();
 
     let ruddervator_right_player = commands
-        .spawn((AnimationPlayer::default(), Name::new("RuddervatorLeftPlayer")))
+        .spawn((AnimationPlayer::default(), Name::new("RuddervatorRightPlayer")))
+        .id();
+
+    let elevon_extern_left_player = commands
+        .spawn((AnimationPlayer::default(), Name::new("ElevonExternLeftPlayer")))
+        .id();
+
+    let elevon_extern_right_player = commands
+        .spawn((AnimationPlayer::default(), Name::new("ElevonExternRightPlayer")))
         .id();
 
     commands.insert_resource(AdditionalPlayers {
         ruddervator_left_player,
         ruddervator_right_player,
+        elevon_extern_left_player,
+        elevon_extern_right_player,
     });
 
     commands.entity(entity_id).add_child(ruddervator_left_player);
@@ -90,6 +100,8 @@ pub fn setup(
 pub struct AdditionalPlayers {
     pub ruddervator_left_player: Entity,
     pub ruddervator_right_player: Entity,
+    pub elevon_extern_left_player: Entity,
+    pub elevon_extern_right_player: Entity,
 }
 
 fn attach_animations(
@@ -118,7 +130,23 @@ fn attach_animations(
             if trimmed_name.starts_with("left") {
                 target.player = players.ruddervator_left_player;
             } else if trimmed_name.starts_with("right") {
-                target.player = players.ruddervator_right_player
+                target.player = players.ruddervator_right_player;
+            }
+        } else if lowercased_name.starts_with("elevon") {
+            let trimmed_name = lowercased_name
+                .trim_start_matches("elevon")
+                .trim_start_matches('_')
+                .trim_start_matches('-')
+                .trim_start()
+                .trim_start_matches("extern")
+                .trim_start_matches('_')
+                .trim_start_matches('-')
+                .trim_start();
+
+            if trimmed_name.starts_with("left") {
+                target.player = players.elevon_extern_left_player;
+            } else if trimmed_name.starts_with("right") {
+                target.player = players.elevon_extern_right_player;
             }
         }
     }
@@ -178,6 +206,8 @@ impl State {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct AnimationData {
+    pub left_elevon: State,
+    pub right_elevon: State,
     pub left_ruddervator: State,
     pub right_ruddervator: State,
     pub pitch: State,
@@ -200,6 +230,19 @@ pub fn control_animations(
     let to_right_pressed = keyboard_input.pressed(KeyCode::KeyD);
     let to_up_pressed = keyboard_input.pressed(KeyCode::ArrowDown);
     let to_down_pressed = keyboard_input.pressed(KeyCode::ArrowUp);
+    let to_roll_left_pressed = keyboard_input.pressed(KeyCode::ArrowLeft);
+    let to_roll_right_pressed = keyboard_input.pressed(KeyCode::ArrowRight);
+
+    if (to_roll_left_pressed && to_roll_right_pressed) || (!to_roll_left_pressed && !to_roll_right_pressed) {
+        data.left_elevon.next = Direction::Origin;
+        data.right_elevon.next = Direction::Origin;
+    } else if to_roll_left_pressed {
+        data.left_elevon.next = Direction::SideA;
+        data.right_elevon.next = Direction::SideB;
+    } else if to_roll_right_pressed {
+        data.left_elevon.next = Direction::SideB;
+        data.right_elevon.next = Direction::SideA;
+    }
 
     if (to_up_pressed && to_down_pressed) || (!to_up_pressed && !to_down_pressed) {
         data.pitch.next = Direction::Origin;
@@ -256,7 +299,39 @@ pub fn control_animations(
             player.stop_all();
         }
 
-        if player_entity == players.ruddervator_left_player {
+        if player_entity == players.elevon_extern_left_player {
+            if data.left_elevon.need_update() {
+                let up_animation_idx = animations.get(AnimationKind::LeftElevonExternUp);
+                let down_animation_idx = animations.get(AnimationKind::LeftElevonExternDown);
+
+                if let Some(new_state) = switch_rotate_animation(
+                    &mut player,
+                    &animation_graph,
+                    &animation_clips,
+                    up_animation_idx,
+                    down_animation_idx,
+                    data.left_elevon,
+                ) {
+                    data.left_elevon = new_state;
+                }
+            }
+        } else if player_entity == players.elevon_extern_right_player {
+            if data.right_elevon.need_update() {
+                let up_animation_idx = animations.get(AnimationKind::RightElevonExternUp);
+                let down_animation_idx = animations.get(AnimationKind::RightElevonExternDown);
+
+                if let Some(new_state) = switch_rotate_animation(
+                    &mut player,
+                    &animation_graph,
+                    &animation_clips,
+                    up_animation_idx,
+                    down_animation_idx,
+                    data.right_elevon,
+                ) {
+                    data.right_elevon = new_state;
+                }
+            }
+        } else if player_entity == players.ruddervator_left_player {
             if data.left_ruddervator.need_update() {
                 let left_animation_idx = animations.get(AnimationKind::LeftRuddervatorTurnLeft);
                 let right_animation_idx = animations.get(AnimationKind::LeftRuddervatorTurnRight);
