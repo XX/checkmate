@@ -1,4 +1,4 @@
-use bevy::animation::graph::{AnimationGraphHandle, AnimationNodeType};
+use bevy::animation::graph::{AnimationGraphHandle, AnimationNodeIndex, AnimationNodeType};
 use bevy::animation::{AnimationClip, AnimationPlayer};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::{Color, ColorToComponents, LinearRgba};
@@ -16,11 +16,11 @@ use bevy::render::mesh::{Mesh, Mesh3d, Meshable};
 use bevy::scene::{SceneInstanceReady, SceneRoot};
 use bevy::transform::components::Transform;
 
+use crate::camera;
 use crate::camera::{AppCameraEntity, AppCameraParams};
 use crate::config::Config;
 use crate::state::{SceneKey, Scenes};
 use crate::utils::combine_meshes;
-use crate::{Animations, camera};
 
 #[derive(Resource)]
 pub struct HangarData {
@@ -119,6 +119,47 @@ pub fn chessboard_land_spawn(
     data.materials.push(material);
 }
 
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(usize)]
+pub enum AnimationKind {
+    Gears = 0,
+}
+
+#[derive(Resource)]
+pub struct Animations {
+    animations: Vec<AnimationNodeIndex>,
+    graph: Handle<AnimationGraph>,
+}
+
+impl Animations {
+    fn get(&self, kind: AnimationKind) -> AnimationNodeIndex {
+        self.animations[kind as usize]
+    }
+}
+
+pub fn setup_animation_graph(
+    mut commands: Commands,
+    config: Res<Config>,
+    asset_server: Res<AssetServer>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+) {
+    let mut animations = Vec::new();
+    let mut graph = AnimationGraph::new();
+
+    let animation_node = graph.add_clip(
+        asset_server.load(GltfAssetLabel::Animation(0).from_asset(config.game.hangar_model.clone())),
+        1.0,
+        graph.root,
+    );
+    animations.push(animation_node);
+
+    let graph = graphs.add(graph);
+    commands.insert_resource(Animations {
+        animations,
+        graph: graph.clone(),
+    });
+}
+
 fn attach_animations(
     _trigger: Trigger<SceneInstanceReady>,
     mut commands: Commands,
@@ -145,7 +186,10 @@ pub fn control_land_gear_animation(
             return;
         };
 
-        for (node_index, mut player) in [animations.animations[0]].into_iter().zip(&mut animation_players) {
+        for (node_index, mut player) in [animations.get(AnimationKind::Gears)]
+            .into_iter()
+            .zip(&mut animation_players)
+        {
             let animation_node = &animation_graph[node_index];
             let animation_start_time = if *reverse {
                 if let AnimationNodeType::Clip(clip_handle) = &animation_node.node_type {

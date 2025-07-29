@@ -1,17 +1,15 @@
 use bevy::DefaultPlugins;
 use bevy::app::{App, Startup, Update};
-use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::Color;
 use bevy::ecs::component::Component;
-use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
+use bevy::ecs::schedule::common_conditions::{resource_exists, run_once};
 use bevy::ecs::system::{Commands, Query, Res, ResMut};
-use bevy::gltf::GltfAssetLabel;
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::math::Vec3;
 use bevy::pbr::{Atmosphere, AtmosphereSettings, DirectionalLight, DirectionalLightShadowMap};
-use bevy::prelude::{AnimationGraph, AnimationNodeIndex, Entity, default};
+use bevy::prelude::{Entity, default};
 use bevy::render::camera::{ClearColorConfig, Exposure};
 use bevy::state::app::AppExtStates;
 use bevy::state::condition::in_state;
@@ -24,6 +22,7 @@ use clap::Parser;
 use crate::camera::{AppCameraParams, AppCameraPlugin};
 use crate::config::Config;
 use crate::diagnostics::DiagnosticsPlugin;
+use crate::state::ingame::animation::AdditionalPlayers;
 use crate::state::{AppState, Scenes, hangar, ingame};
 
 mod camera;
@@ -84,12 +83,22 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             OnEnter(AppState::Hangar),
-            (hangar::setup, hangar::chessboard_land_spawn).chain(),
+            (
+                hangar::setup_animation_graph.run_if(run_once),
+                hangar::setup,
+                hangar::chessboard_land_spawn,
+            )
+                .chain(),
         )
         .add_systems(OnExit(AppState::Hangar), hangar::cleanup)
         .add_systems(
             OnEnter(AppState::InGame),
-            (ingame::setup, ingame::terrain::setup).chain(),
+            (
+                ingame::animation::setup_animation_graph.run_if(run_once),
+                ingame::setup,
+                ingame::terrain::setup,
+            )
+                .chain(),
         )
         .add_systems(
             Update,
@@ -97,7 +106,7 @@ fn main() {
                 ingame::aircraft::update_thrust,
                 ingame::aircraft::movement,
                 ingame::aircraft::rotation,
-                ingame::control_animations,
+                ingame::animation::control.run_if(resource_exists::<AdditionalPlayers>),
                 camera::follow_toggle,
                 camera::follow_move,
                 follow::update_previous_transform,
@@ -119,42 +128,7 @@ fn main() {
 #[derive(Component)]
 struct Sun;
 
-#[derive(Resource)]
-struct Animations {
-    animations: Vec<AnimationNodeIndex>,
-    graph: Handle<AnimationGraph>,
-}
-
-impl Animations {
-    fn get(&self, kind: AnimationKind) -> AnimationNodeIndex {
-        self.animations[kind as usize]
-    }
-}
-
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(usize)]
-pub enum AnimationKind {
-    Gears = 0,
-    LeftElevonExternDown,
-    LeftElevonExternUp,
-    LeftRuddervatorTurnLeft,
-    LeftRuddervatorTurnRight,
-    Rest,
-    RightElevonExternDown,
-    RightElevonExternUp,
-    RightRuddervatorTurnLeft,
-    RightRuddervatorTurnRight,
-    PitchDown,
-    PitchUp,
-}
-
-fn setup(
-    mut commands: Commands,
-    config: Res<Config>,
-    asset_server: Res<AssetServer>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-    mut next_state: ResMut<NextState<AppState>>,
-) {
+fn setup(mut commands: Commands, config: Res<Config>, mut next_state: ResMut<NextState<AppState>>) {
     commands.spawn((
         Sun,
         DirectionalLight {
@@ -165,34 +139,6 @@ fn setup(
         Transform::from_translation(config.environment.sun.position.into())
             .looking_at(config.environment.sun.target.into(), Vec3::Y),
     ));
-
-    // Build the animation graph
-    let mut animations = Vec::new();
-    let mut graph = AnimationGraph::new();
-
-    let animation_node = graph.add_clip(
-        asset_server.load(GltfAssetLabel::Animation(0).from_asset(config.game.hangar_model.clone())),
-        1.0,
-        graph.root,
-    );
-    animations.push(animation_node);
-
-    let parent = graph.root;
-    let weight = 1.0;
-    for i in 0..11 {
-        let animation_node = graph.add_clip(
-            asset_server.load(GltfAssetLabel::Animation(i).from_asset(config.game.flying_model.clone())),
-            weight,
-            parent,
-        );
-        animations.push(animation_node);
-    }
-
-    let graph = graphs.add(graph);
-    commands.insert_resource(Animations {
-        animations,
-        graph: graph.clone(),
-    });
 
     next_state.set(config.game.state);
 }
