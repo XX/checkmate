@@ -20,6 +20,7 @@ use crate::state::{SceneKey, Scenes};
 
 pub mod aircraft;
 pub mod animation;
+pub mod engine;
 pub mod terrain;
 
 #[derive(Default, Resource)]
@@ -40,7 +41,9 @@ pub fn setup(
     let scene = scenes
         .game
         .entry(SceneKey::Aircraft)
-        .or_insert_with(|| asset_server.load(GltfAssetLabel::Scene(0).from_asset(config.game.flying_model.clone())))
+        .or_insert_with(|| {
+            asset_server.load(GltfAssetLabel::Scene(0).from_asset(config.game.flying_model.path.clone()))
+        })
         .clone();
 
     let altitude = config.game.flight_altitude;

@@ -54,7 +54,7 @@ pub fn setup_animation_graph(
     let weight = 1.0;
     for i in 0..11 {
         let animation_node = graph.add_clip(
-            asset_server.load(GltfAssetLabel::Animation(i).from_asset(config.game.flying_model.clone())),
+            asset_server.load(GltfAssetLabel::Animation(i).from_asset(config.game.flying_model.path.clone())),
             weight,
             parent,
         );

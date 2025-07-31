@@ -97,6 +97,7 @@ fn main() {
                 ingame::animation::setup_animation_graph.run_if(run_once),
                 ingame::setup,
                 ingame::terrain::setup,
+                ingame::engine::setup_jet_fire,
             )
                 .chain(),
         )
@@ -107,6 +108,7 @@ fn main() {
                 ingame::aircraft::movement,
                 ingame::aircraft::rotation,
                 ingame::animation::control.run_if(resource_exists::<AdditionalPlayers>),
+                ingame::engine::flickering_light_system,
                 camera::follow_toggle,
                 camera::follow_move,
                 follow::update_previous_transform,

@@ -30,7 +30,7 @@ pub struct GameSettings {
     pub hangar_model: String,
 
     #[serde(default)]
-    pub flying_model: String,
+    pub flying_model: FlyingModelSettings,
 
     #[serde(default = "GameSettings::default_flight_altitude")]
     pub flight_altitude: f32,
@@ -67,6 +67,117 @@ impl GameSettings {
 
     pub const fn default_flight_altitude() -> f32 {
         1000.0
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct FlyingModelSettings {
+    #[serde(default)]
+    pub path: String,
+
+    #[serde(default = "FlyingModelSettings::default_jet_fires")]
+    pub jet_fires: Vec<JetFireSettings>,
+}
+
+impl Default for FlyingModelSettings {
+    fn default() -> Self {
+        Self {
+            path: Default::default(),
+            jet_fires: Self::default_jet_fires(),
+        }
+    }
+}
+
+impl FlyingModelSettings {
+    pub fn default_jet_fires() -> Vec<JetFireSettings> {
+        vec![JetFireSettings::default()]
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct JetFireSettings {
+    #[serde(default = "JetFireSettings::default_intensity")]
+    pub intensity: f32,
+
+    #[serde(default = "JetFireSettings::default_color")]
+    pub color: [f32; 3],
+
+    #[serde(default = "JetFireSettings::default_radius")]
+    pub radius: f32,
+
+    #[serde(default = "JetFireSettings::default_range")]
+    pub range: f32,
+
+    #[serde(default = "JetFireSettings::default_position")]
+    pub position: [f32; 3],
+
+    #[serde(default)]
+    pub flickering: FlickeringSettings,
+}
+
+impl Default for JetFireSettings {
+    fn default() -> Self {
+        Self {
+            intensity: Self::default_intensity(),
+            color: Self::default_color(),
+            radius: Self::default_radius(),
+            range: Self::default_range(),
+            position: Self::default_position(),
+            flickering: Default::default(),
+        }
+    }
+}
+
+impl JetFireSettings {
+    pub const fn default_intensity() -> f32 {
+        3000000.0
+    }
+
+    pub const fn default_color() -> [f32; 3] {
+        [1.0, 0.5, 0.1]
+    }
+
+    pub const fn default_radius() -> f32 {
+        0.05
+    }
+
+    pub const fn default_range() -> f32 {
+        5.0
+    }
+
+    pub const fn default_position() -> [f32; 3] {
+        [0.0, 0.0, -5.5]
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct FlickeringSettings {
+    #[serde(default = "FlickeringSettings::default_variation")]
+    pub variation: f32,
+
+    #[serde(default = "FlickeringSettings::default_frequency")]
+    pub frequency: f32,
+}
+
+impl Default for FlickeringSettings {
+    fn default() -> Self {
+        Self {
+            variation: Self::default_variation(),
+            frequency: Self::default_frequency(),
+        }
+    }
+}
+
+impl FlickeringSettings {
+    pub const fn default_variation() -> f32 {
+        600000.0
+    }
+
+    pub const fn default_frequency() -> f32 {
+        0.03
     }
 }
 

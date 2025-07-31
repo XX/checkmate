@@ -1640,6 +1640,7 @@ dependencies = [
  "clap",
  "config-load",
  "derive_more 2.0.1",
+ "fastrand",
  "iyes_perf_ui",
  "serde",
 ]
