@@ -1,7 +1,7 @@
 **/target/
 **/*.rs.bk
 
-/assets/
+/assets/models/
 Config.toml
 
 TODO.*
