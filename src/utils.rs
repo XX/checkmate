@@ -1,6 +1,6 @@
+use bevy::asset::RenderAssetUsages;
 use bevy::math::{Mat3, Vec3, Vec4Swizzles};
-use bevy::render::mesh::{Indices, Mesh, PrimitiveTopology, VertexAttributeValues};
-use bevy::render::render_asset::RenderAssetUsages;
+use bevy::mesh::{Indices, Mesh, PrimitiveTopology, VertexAttributeValues};
 use bevy::transform::components::Transform;
 
 pub fn combine_meshes<'a>(
@@ -23,7 +23,7 @@ pub fn combine_meshes<'a>(
 
     for (mesh, transform) in meshes {
         if let Some(Indices::U32(mesh_indices)) = mesh.indices() {
-            let matrix = transform.compute_matrix();
+            let matrix = transform.to_matrix();
 
             let positions_len = if let Some(VertexAttributeValues::Float32x3(vert_positions)) =
                 mesh.attribute(Mesh::ATTRIBUTE_POSITION)

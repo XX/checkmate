@@ -2,7 +2,7 @@ use bevy::animation::graph::{AnimationGraphHandle, AnimationNodeIndex, Animation
 use bevy::animation::{AnimationClip, AnimationPlayer};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::{Color, ColorToComponents, LinearRgba};
-use bevy::ecs::observer::Trigger;
+use bevy::ecs::observer::On;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Commands, Local, Query, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
@@ -10,9 +10,9 @@ use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::math::Vec3;
 use bevy::math::primitives::Plane3d;
-use bevy::pbr::{MeshMaterial3d, StandardMaterial};
+use bevy::mesh::{Mesh, Mesh3d, Meshable};
+use bevy::pbr::{MeshMaterial3d, ScatteringMedium, StandardMaterial};
 use bevy::prelude::{AnimationGraph, Entity, MeshBuilder};
-use bevy::render::mesh::{Mesh, Mesh3d, Meshable};
 use bevy::scene::{SceneInstanceReady, SceneRoot};
 use bevy::transform::components::Transform;
 
@@ -36,6 +36,7 @@ pub fn setup(
     mut scenes: ResMut<Scenes>,
     camera: Res<AppCameraEntity>,
     camera_params: ResMut<AppCameraParams>,
+    scattering_mediums: ResMut<Assets<ScatteringMedium>>,
 ) {
     let scene = scenes
         .hangar
@@ -55,7 +56,14 @@ pub fn setup(
         materials: vec![],
     });
 
-    camera::respawn_panorbit(commands, camera_params, camera.entity_id, &config.camera, height);
+    camera::respawn_panorbit(
+        commands,
+        camera_params,
+        scattering_mediums,
+        camera.entity_id,
+        &config.camera,
+        height,
+    );
 }
 
 pub fn cleanup(
@@ -161,7 +169,7 @@ pub fn setup_animation_graph(
 }
 
 fn attach_animations(
-    _trigger: Trigger<SceneInstanceReady>,
+    _trigger: On<SceneInstanceReady>,
     mut commands: Commands,
     to_animated_entities: Query<(Entity, &AnimationPlayer)>,
     animations: Res<Animations>,

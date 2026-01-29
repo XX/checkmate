@@ -2,12 +2,12 @@ use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 
 use bevy::color::Color;
-use bevy::core_pipeline::auto_exposure::AutoExposure;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::resource::Resource;
+use bevy::light::GlobalAmbientLight;
+use bevy::light::light_consts::lux;
 use bevy::math::{Quat, Vec3};
-use bevy::pbr::AmbientLight;
-use bevy::pbr::light_consts::lux;
+use bevy::post_process::auto_exposure::AutoExposure;
 use bevy::transform::components::Transform;
 use config_load::config::builder::DefaultState;
 use config_load::config::{ConfigBuilder, Environment};
@@ -348,9 +348,9 @@ impl AmbientSettings {
         true
     }
 
-    pub fn to_ambient_light(&self) -> Option<AmbientLight> {
+    pub fn to_ambient_light(&self) -> Option<GlobalAmbientLight> {
         if self.enabled {
-            Some(AmbientLight {
+            Some(GlobalAmbientLight {
                 color: self.color,
                 brightness: self.brightness,
                 affects_lightmapped_meshes: self.affects_lightmapped_meshes,

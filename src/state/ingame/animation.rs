@@ -1,9 +1,9 @@
 use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex, AnimationNodeType};
-use bevy::animation::{AnimationClip, AnimationPlayer, AnimationTarget};
+use bevy::animation::{AnimatedBy, AnimationClip, AnimationPlayer};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::ecs::entity::Entity;
 use bevy::ecs::name::Name;
-use bevy::ecs::observer::Trigger;
+use bevy::ecs::observer::On;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Commands, Local, Query, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
@@ -77,10 +77,10 @@ pub struct AdditionalPlayers {
 }
 
 pub fn attach_animations(
-    _trigger: Trigger<SceneInstanceReady>,
+    _trigger: On<SceneInstanceReady>,
     mut commands: Commands,
     to_animated_entities: Query<(Entity, &AnimationPlayer)>,
-    animation_targets: Query<(&Name, &mut AnimationTarget)>,
+    animation_targets: Query<(&Name, &mut AnimatedBy)>,
     animations: Res<Animations>,
     players: Res<AdditionalPlayers>,
 ) {
@@ -100,9 +100,9 @@ pub fn attach_animations(
                 .trim_start();
 
             if trimmed_name.starts_with("left") {
-                target.player = players.ruddervator_left_player;
+                target.0 = players.ruddervator_left_player;
             } else if trimmed_name.starts_with("right") {
-                target.player = players.ruddervator_right_player;
+                target.0 = players.ruddervator_right_player;
             }
         } else if lowercased_name.starts_with("elevon") {
             let trimmed_name = lowercased_name
@@ -116,9 +116,9 @@ pub fn attach_animations(
                 .trim_start();
 
             if trimmed_name.starts_with("left") {
-                target.player = players.elevon_extern_left_player;
+                target.0 = players.elevon_extern_left_player;
             } else if trimmed_name.starts_with("right") {
-                target.player = players.elevon_extern_right_player;
+                target.0 = players.elevon_extern_right_player;
             }
         }
     }

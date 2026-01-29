@@ -1,7 +1,7 @@
 use bevy::color::Color;
 use bevy::ecs::component::Component;
 use bevy::ecs::system::{Commands, Query, Res};
-use bevy::pbr::PointLight;
+use bevy::light::PointLight;
 use bevy::time::{Time, Timer, TimerMode};
 use bevy::transform::components::Transform;
 
@@ -44,7 +44,7 @@ pub fn setup_jet_fire(mut commands: Commands, config: Res<Config>, data: Res<Gam
 pub fn flickering_light_system(time: Res<Time>, mut query: Query<(&mut PointLight, &mut FlickeringLight)>) {
     for (mut light, mut flicker) in &mut query {
         flicker.timer.tick(time.delta());
-        if flicker.timer.finished() {
+        if flicker.timer.is_finished() {
             // Псевдослучайный коэффициент [-1.0; 1.0]
             let rand: f32 = (fastrand::f32() - 0.5) * 2.0;
             light.intensity = flicker.base_intensity + rand * flicker.variation;

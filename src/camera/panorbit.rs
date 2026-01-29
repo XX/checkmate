@@ -1,15 +1,16 @@
 use std::f32::consts;
 
+use bevy::camera::Projection;
 use bevy::ecs::component::Component;
-use bevy::ecs::event::EventReader;
+use bevy::ecs::message::MessageReader;
 use bevy::ecs::system::{Query, Res};
 use bevy::input::ButtonInput;
 use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::math::{Mat3, Quat, Vec2, Vec3};
-use bevy::render::camera::Projection;
 use bevy::time::Time;
 use bevy::transform::components::Transform;
 use bevy::window::Window;
+use bevy_inspector_egui::bevy_egui::EguiContexts;
 
 use crate::camera::LookingAt;
 
@@ -50,9 +51,10 @@ pub struct PanOrbitCamera {
     pub focus: Vec3,
     pub radius: f32,
     pub upside_down: bool,
+    pub smoothness_speed: f32,
     pub orbit_button: MouseButton,
     pub pan_button: MouseButton,
-    pub smoothness_speed: f32,
+    pub mouse_control_enabled: bool,
 }
 
 impl Default for PanOrbitCamera {
@@ -61,9 +63,10 @@ impl Default for PanOrbitCamera {
             focus: Vec3::ZERO,
             radius: 5.0,
             upside_down: false,
+            smoothness_speed: 8.0,
             orbit_button: MouseButton::Left,
             pan_button: MouseButton::Right,
-            smoothness_speed: 8.0,
+            mouse_control_enabled: true,
         }
     }
 }
@@ -77,17 +80,21 @@ impl PanOrbitCamera {
 
 pub fn update_input(
     windows: Query<&Window>,
-    mut motion_events: EventReader<MouseMotion>,
-    mut scroll_events: EventReader<MouseWheel>,
+    mut motion_events: MessageReader<MouseMotion>,
+    mut scroll_events: MessageReader<MouseWheel>,
     input_mouse: Res<ButtonInput<MouseButton>>,
     mut query: Query<(&mut PanOrbitCamera, &mut PanOrbitCameraTarget, &Transform, &Projection)>,
 ) {
     let primary_window = windows.single().expect("Window must be single");
 
     for (mut camera, mut target, transform, projection) in query.iter_mut() {
+        if !camera.mouse_control_enabled {
+            continue;
+        }
+
         let mut pan = Vec2::ZERO;
         let mut rotation_move = Vec2::ZERO;
-        let mut scroll = 0.0;
+        let mut scroll = 0.0_f32;
         let mut orbit_button_changed = false;
 
         if input_mouse.pressed(camera.orbit_button) {
@@ -168,6 +175,18 @@ pub fn interpolate_camera(
         transform.rotation = transform.rotation.slerp(target.rotation, lerp_factor);
 
         camera.update_position(&mut transform);
+    }
+}
+
+pub fn block_camera_mouse_control_when_hovering_ui(
+    mut contexts: EguiContexts,
+    mut camera_query: Query<&mut PanOrbitCamera>,
+) {
+    if let Ok(ctx) = contexts.ctx_mut() {
+        let camera_mouse_control_enabled = if ctx.is_pointer_over_area() { false } else { true };
+        for mut camera in camera_query.iter_mut() {
+            camera.mouse_control_enabled = camera_mouse_control_enabled;
+        }
     }
 }
 

@@ -1,13 +1,11 @@
 use bevy::app::{App, Plugin, Startup, Update};
-use bevy::core_pipeline::core_3d::Camera3d;
+use bevy::camera::{Camera, Camera3d};
 use bevy::ecs::component::Component;
-use bevy::ecs::event::EventReader;
+use bevy::ecs::message::MessageReader;
 use bevy::ecs::system::{Commands, Query, Res};
 use bevy::input::ButtonInput;
 use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::math::{EulerRot, Quat, Vec3};
-use bevy::prelude::default;
-use bevy::render::camera::Camera;
 use bevy::time::Time;
 use bevy::transform::components::Transform;
 
@@ -40,14 +38,14 @@ pub fn spawn(mut commands: Commands) {
     commands.spawn((
         SimpleCamera::default(),
         Camera3d::default(),
-        Camera { hdr: true, ..default() },
+        Camera::default(),
         Transform::from_translation(translation).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }
 
 pub fn update_input(
-    mut mouse_motion: EventReader<MouseMotion>,
-    mut mouse_wheel: EventReader<MouseWheel>,
+    mut mouse_motion: MessageReader<MouseMotion>,
+    mut mouse_wheel: MessageReader<MouseWheel>,
     buttons: Res<ButtonInput<MouseButton>>,
     mut query: Query<(&mut SimpleCamera, &mut Transform)>,
     time: Res<Time>,

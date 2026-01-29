@@ -11,11 +11,12 @@ opt-level = 1
 
 
 [dependencies]
-bevy = { version = "0.16", features = ["serialize", "jpeg", "tga"] }
-bevy_obj = "0.16"
+bevy = { version = "0.18", features = ["serialize", "jpeg", "tga"] }
+bevy-inspector-egui = "0.36"
+bevy_obj = "0.18"
 clap = { version = "4.5", features = ["derive"] }
 config-load = "0.1"
-derive_more = { version = "2.0", features = ["debug"] }
-iyes_perf_ui = "0.5"
+derive_more = { version = "2.1", features = ["debug"] }
+iyes_perf_ui = { git = "https://github.com/blip-radar/iyes_perf_ui.git", branch = "bevy-0-18" }
 fastrand = "2"
 serde = { version = "1.0", features = ["derive"] }

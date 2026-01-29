@@ -1,21 +1,25 @@
 use bevy::DefaultPlugins;
 use bevy::app::{App, Startup, Update};
+use bevy::camera::{ClearColorConfig, Exposure};
 use bevy::color::Color;
 use bevy::ecs::component::Component;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::schedule::common_conditions::{resource_exists, run_once};
 use bevy::ecs::system::{Commands, Query, Res, ResMut};
 use bevy::input::ButtonInput;
+use bevy::input::common_conditions::input_toggle_active;
 use bevy::input::keyboard::KeyCode;
+use bevy::light::{DirectionalLight, DirectionalLightShadowMap};
 use bevy::math::Vec3;
-use bevy::pbr::{Atmosphere, AtmosphereSettings, DirectionalLight, DirectionalLightShadowMap};
+use bevy::pbr::{Atmosphere, AtmosphereSettings, ScatteringMedium};
 use bevy::prelude::{Entity, default};
-use bevy::render::camera::{ClearColorConfig, Exposure};
 use bevy::state::app::AppExtStates;
 use bevy::state::condition::in_state;
 use bevy::state::state::{NextState, OnEnter, OnExit};
 use bevy::transform::components::Transform;
 use bevy::window::Window;
+use bevy_inspector_egui::bevy_egui::{EguiGlobalSettings, EguiPlugin};
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_obj::ObjPlugin;
 use clap::Parser;
 
@@ -51,11 +55,15 @@ fn main() {
             .with_exposure(Exposure {
                 ev100: config.camera.exposure,
             })
-            .with_atmosphere((Atmosphere::EARTH, AtmosphereSettings {
-                // aerial_view_lut_max_distance: 3.2e5,
-                scene_units_to_m: 1.0, //1e+4,
-                ..Default::default()
-            }))
+            .with_atmosphere((
+                Atmosphere::earthlike(Default::default()),
+                ScatteringMedium::default(),
+                AtmosphereSettings {
+                    // aerial_view_lut_max_distance: 3.2e5,
+                    scene_units_to_m: 1.0, //1e+4,
+                    ..Default::default()
+                },
+            ))
     } else {
         camera_params.with_custom_clear_color(Color::srgb(0.7, 0.92, 0.96))
     };
@@ -78,7 +86,14 @@ fn main() {
         })
         .insert_resource(config)
         .insert_resource(Scenes::default())
-        .add_plugins((DefaultPlugins, ObjPlugin, DiagnosticsPlugin, AppCameraPlugin))
+        .add_plugins((
+            DefaultPlugins,
+            EguiPlugin::default(),
+            WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Backquote)),
+            ObjPlugin,
+            DiagnosticsPlugin,
+            AppCameraPlugin,
+        ))
         .init_state::<AppState>()
         .add_systems(Startup, setup)
         .add_systems(
@@ -130,7 +145,15 @@ fn main() {
 #[derive(Component)]
 struct Sun;
 
-fn setup(mut commands: Commands, config: Res<Config>, mut next_state: ResMut<NextState<AppState>>) {
+fn setup(
+    mut commands: Commands,
+    config: Res<Config>,
+    mut egui_global_settings: ResMut<EguiGlobalSettings>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    // Disable the automatic creation of a primary context to set it up manually for the camera we need.
+    egui_global_settings.auto_create_primary_context = false;
+
     commands.spawn((
         Sun,
         DirectionalLight {
