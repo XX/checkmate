@@ -9,9 +9,10 @@ use bevy::ecs::system::{Commands, Query, Res, ResMut};
 use bevy::input::ButtonInput;
 use bevy::input::common_conditions::input_toggle_active;
 use bevy::input::keyboard::KeyCode;
-use bevy::light::{DirectionalLight, DirectionalLightShadowMap};
+use bevy::light::atmosphere::ScatteringMedium;
+use bevy::light::{Atmosphere, DirectionalLight, DirectionalLightShadowMap};
 use bevy::math::Vec3;
-use bevy::pbr::{Atmosphere, AtmosphereSettings, ScatteringMedium};
+use bevy::pbr::AtmosphereSettings;
 use bevy::prelude::{Entity, default};
 use bevy::state::app::AppExtStates;
 use bevy::state::condition::in_state;
@@ -56,11 +57,11 @@ fn main() {
                 ev100: config.camera.exposure,
             })
             .with_atmosphere((
-                Atmosphere::earthlike(Default::default()),
+                Atmosphere::earth(Default::default()),
                 ScatteringMedium::default(),
                 AtmosphereSettings {
                     // aerial_view_lut_max_distance: 3.2e5,
-                    scene_units_to_m: 1.0, //1e+4,
+                    // scene_units_to_m: 1.0, //1e+4,
                     rendering_method: config.environment.atmosphere.render_mode.into(),
                     ..Default::default()
                 },
@@ -158,7 +159,7 @@ fn setup(
     commands.spawn((
         Sun,
         DirectionalLight {
-            shadows_enabled: config.environment.sun.shadows_enabled,
+            shadow_maps_enabled: config.environment.sun.shadows_enabled,
             illuminance: config.environment.sun.illuminance,
             ..default()
         },

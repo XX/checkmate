@@ -2,7 +2,7 @@ use bevy::asset::AssetServer;
 use bevy::ecs::component::Component;
 use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
-use bevy::scene::SceneRoot;
+use bevy::world_serialization::WorldAssetRoot;
 
 use crate::config::Config;
 use crate::state::ingame::GameData;
@@ -32,7 +32,11 @@ pub fn setup(
         })
         .clone();
     let terrain_id = commands
-        .spawn((Terrain, SceneRoot(scene.clone()), config.game.terrain.get_transform()))
+        .spawn((
+            Terrain,
+            WorldAssetRoot(scene.clone()),
+            config.game.terrain.get_transform(),
+        ))
         .id();
 
     data.entities.push(terrain_id);

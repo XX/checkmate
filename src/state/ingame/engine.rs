@@ -25,7 +25,7 @@ pub fn setup_jet_fire(mut commands: Commands, config: Res<Config>, data: Res<Gam
                         color: Color::srgb_from_array(jet_fire_config.color),
                         radius: jet_fire_config.radius,
                         range: jet_fire_config.range,
-                        shadows_enabled: true,
+                        shadow_maps_enabled: true,
                         ..Default::default()
                     },
                     Transform::from_translation(jet_fire_config.position.into()),

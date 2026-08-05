@@ -9,7 +9,7 @@ use bevy::ecs::system::{Commands, Local, Query, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
-use bevy::scene::SceneInstanceReady;
+use bevy::world_serialization::WorldInstanceReady;
 
 use crate::config::Config;
 
@@ -77,7 +77,7 @@ pub struct AdditionalPlayers {
 }
 
 pub fn attach_animations(
-    _trigger: On<SceneInstanceReady>,
+    _trigger: On<WorldInstanceReady>,
     mut commands: Commands,
     to_animated_entities: Query<(Entity, &AnimationPlayer)>,
     animation_targets: Query<(&Name, &mut AnimatedBy)>,

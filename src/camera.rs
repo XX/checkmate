@@ -4,14 +4,17 @@ use bevy::camera::{Camera, Camera3d, ClearColorConfig, Exposure, PerspectiveProj
 use bevy::color::Color;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::entity::Entity;
+use bevy::ecs::name::Name;
 use bevy::ecs::query::{With, Without};
 use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::system::{Commands, Query, Res, ResMut};
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
+use bevy::light::Atmosphere;
+use bevy::light::atmosphere::ScatteringMedium;
 use bevy::math::{Dir3, Vec3};
-use bevy::pbr::{Atmosphere, AtmosphereSettings, ScatteringMedium};
+use bevy::pbr::AtmosphereSettings;
 use bevy::post_process::auto_exposure::{AutoExposure, AutoExposurePlugin};
 use bevy::post_process::bloom::Bloom;
 use bevy::transform::components::Transform;
@@ -132,17 +135,30 @@ impl Plugin for AppCameraPlugin {
             app.add_plugins(AutoExposurePlugin);
         }
 
-        app.add_systems(Startup, spawn_panorbit)
+        app.add_systems(Startup, (spawn_atmosphere, spawn_panorbit))
             .add_systems(Update, (panorbit::update_input, panorbit::interpolate_camera).chain())
             .add_systems(Update, panorbit::block_camera_mouse_control_when_hovering_ui);
     }
 }
 
-pub fn spawn_panorbit(
+pub fn spawn_atmosphere(
     mut commands: Commands,
     params: Res<AppCameraParams>,
     mut scattering_mediums: ResMut<Assets<ScatteringMedium>>,
 ) {
+    let Some((mut atmosphere, medium, _)) = params.atmosphere.clone() else {
+        return;
+    };
+    atmosphere.medium = scattering_mediums.add(medium);
+
+    commands.spawn((
+        Name::new("Atmosphere"),
+        Transform::from_translation(Vec3::NEG_Y * atmosphere.inner_radius),
+        atmosphere,
+    ));
+}
+
+pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
     let target = PanOrbitCameraTarget::new(params.position, params.look_at);
     let transform = Transform::from_translation(params.position).with_rotation(target.rotation);
 
@@ -181,10 +197,8 @@ pub fn spawn_panorbit(
         entity.insert(auto_exposure);
     }
 
-    if let Some((mut atmosphere, medium, settings)) = params.atmosphere.clone() {
-        atmosphere.medium = scattering_mediums.add(medium);
-
-        entity.insert((atmosphere, settings));
+    if let Some((_, _, settings)) = params.atmosphere.clone() {
+        entity.insert(settings);
     }
 
     let entity_id = entity.id();
@@ -194,7 +208,6 @@ pub fn spawn_panorbit(
 pub fn respawn_panorbit(
     mut commands: Commands,
     mut params: ResMut<AppCameraParams>,
-    scattering_mediums: ResMut<Assets<ScatteringMedium>>,
     camera: Entity,
     settings: &CameraSettings,
     height: f32,
@@ -219,7 +232,7 @@ pub fn respawn_panorbit(
     params.position = position;
     params.look_at.target = target;
 
-    spawn_panorbit(commands, params.into(), scattering_mediums);
+    spawn_panorbit(commands, params.into());
 }
 
 pub fn preset_toggle(

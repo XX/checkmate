@@ -5,8 +5,8 @@ use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Res, ResMut};
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
-use bevy::scene::Scene;
 use bevy::state::state::{NextState, State, States};
+use bevy::world_serialization::WorldAsset;
 use serde::{Deserialize, Serialize};
 
 pub mod hangar;
@@ -28,8 +28,8 @@ pub enum SceneKey {
 
 #[derive(Default, Resource)]
 pub struct Scenes {
-    pub hangar: HashMap<SceneKey, Handle<Scene>>,
-    pub game: HashMap<SceneKey, Handle<Scene>>,
+    pub hangar: HashMap<SceneKey, Handle<WorldAsset>>,
+    pub game: HashMap<SceneKey, Handle<WorldAsset>>,
 }
 
 pub fn change(

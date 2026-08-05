@@ -11,10 +11,10 @@ use bevy::input::keyboard::KeyCode;
 use bevy::math::Vec3;
 use bevy::math::primitives::Plane3d;
 use bevy::mesh::{Mesh, Mesh3d, Meshable};
-use bevy::pbr::{MeshMaterial3d, ScatteringMedium, StandardMaterial};
+use bevy::pbr::{MeshMaterial3d, StandardMaterial};
 use bevy::prelude::{AnimationGraph, Entity, MeshBuilder};
-use bevy::scene::{SceneInstanceReady, SceneRoot};
 use bevy::transform::components::Transform;
+use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
 
 use crate::camera;
 use crate::camera::{AppCameraEntity, AppCameraParams};
@@ -36,7 +36,6 @@ pub fn setup(
     mut scenes: ResMut<Scenes>,
     camera: Res<AppCameraEntity>,
     camera_params: ResMut<AppCameraParams>,
-    scattering_mediums: ResMut<Assets<ScatteringMedium>>,
 ) {
     let scene = scenes
         .hangar
@@ -46,7 +45,10 @@ pub fn setup(
 
     let height = 2.31;
     let entity_id = commands
-        .spawn((SceneRoot(scene), Transform::from_translation(Vec3::ZERO.with_y(height))))
+        .spawn((
+            WorldAssetRoot(scene),
+            Transform::from_translation(Vec3::ZERO.with_y(height)),
+        ))
         .observe(attach_animations)
         .id();
 
@@ -59,7 +61,6 @@ pub fn setup(
     camera::respawn_panorbit(
         commands,
         camera_params,
-        scattering_mediums,
         camera.entity_id,
         &config.camera,
         height,
@@ -169,7 +170,7 @@ pub fn setup_animation_graph(
 }
 
 fn attach_animations(
-    _trigger: On<SceneInstanceReady>,
+    _trigger: On<WorldInstanceReady>,
     mut commands: Commands,
     to_animated_entities: Query<(Entity, &AnimationPlayer)>,
     animations: Res<Animations>,

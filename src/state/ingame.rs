@@ -7,9 +7,9 @@ use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
 use bevy::math::Vec3;
 use bevy::mesh::Mesh;
-use bevy::pbr::{ScatteringMedium, StandardMaterial};
-use bevy::scene::SceneRoot;
+use bevy::pbr::StandardMaterial;
 use bevy::transform::components::Transform;
+use bevy::world_serialization::WorldAssetRoot;
 
 use crate::camera::{self, AppCameraEntity, AppCameraParams};
 use crate::config::Config;
@@ -37,7 +37,6 @@ pub fn setup(
     mut scenes: ResMut<Scenes>,
     camera: Res<AppCameraEntity>,
     mut camera_params: ResMut<AppCameraParams>,
-    scattering_mediums: ResMut<Assets<ScatteringMedium>>,
 ) {
     let scene = scenes
         .game
@@ -55,7 +54,7 @@ pub fn setup(
             Thrust::new(),
             Movement::default(),
             Followee,
-            SceneRoot(scene),
+            WorldAssetRoot(scene),
             PreviousTransform(transform.clone()),
             transform,
         ))
@@ -99,14 +98,7 @@ pub fn setup(
     });
 
     camera_params.follower.followee = Some(entity_id);
-    camera::respawn_panorbit(
-        commands,
-        camera_params,
-        scattering_mediums,
-        camera.entity_id,
-        &config.camera,
-        altitude,
-    );
+    camera::respawn_panorbit(commands, camera_params, camera.entity_id, &config.camera, altitude);
 }
 
 pub fn cleanup(
