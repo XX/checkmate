@@ -61,6 +61,7 @@ fn main() {
                 AtmosphereSettings {
                     // aerial_view_lut_max_distance: 3.2e5,
                     scene_units_to_m: 1.0, //1e+4,
+                    rendering_method: config.environment.atmosphere.render_mode.into(),
                     ..Default::default()
                 },
             ))

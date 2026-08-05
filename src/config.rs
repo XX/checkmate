@@ -366,6 +366,25 @@ impl AmbientSettings {
 pub struct AtmosphereSettings {
     #[serde(default)]
     pub enabled: bool,
+    pub render_mode: AtmosphereMode,
+}
+
+#[derive(Copy, Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AtmosphereMode {
+    #[default]
+    LookupTexture,
+
+    Raymarched,
+}
+
+impl From<AtmosphereMode> for bevy::pbr::AtmosphereMode {
+    fn from(mode: AtmosphereMode) -> Self {
+        match mode {
+            AtmosphereMode::LookupTexture => Self::LookupTexture,
+            AtmosphereMode::Raymarched => Self::Raymarched,
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
