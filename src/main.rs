@@ -10,7 +10,7 @@ use bevy::input::ButtonInput;
 use bevy::input::common_conditions::input_toggle_active;
 use bevy::input::keyboard::KeyCode;
 use bevy::light::atmosphere::ScatteringMedium;
-use bevy::light::{Atmosphere, DirectionalLight, DirectionalLightShadowMap};
+use bevy::light::{Atmosphere, DirectionalLight, DirectionalLightShadowMap, SunDisk};
 use bevy::math::Vec3;
 use bevy::pbr::AtmosphereSettings;
 use bevy::prelude::{Entity, default};
@@ -48,6 +48,7 @@ fn main() {
     let camera_params = AppCameraParams::default()
         .with_smoothness_speed(8.0)
         .with_tonemapping(config.camera.tonemap)
+        .with_bloom(config.camera.bloom)
         .with_follower(config.camera.follow.to_follower());
 
     let camera_params = if config.environment.atmosphere.enabled {
@@ -162,6 +163,10 @@ fn setup(
             shadow_maps_enabled: config.environment.sun.shadows_enabled,
             illuminance: config.environment.sun.illuminance,
             ..default()
+        },
+        SunDisk {
+            angular_size: config.environment.sun.angular_size,
+            intensity: config.environment.sun.intensity,
         },
         Transform::from_translation(config.environment.sun.position.into())
             .looking_at(config.environment.sun.target.into(), Vec3::Y),

@@ -4,10 +4,11 @@ use std::path::{Path, PathBuf};
 use bevy::color::Color;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::resource::Resource;
-use bevy::light::GlobalAmbientLight;
 use bevy::light::light_consts::lux;
+use bevy::light::{GlobalAmbientLight, SunDisk};
 use bevy::math::{Quat, Vec3};
 use bevy::post_process::auto_exposure::AutoExposure;
+use bevy::post_process::bloom::Bloom;
 use bevy::transform::components::Transform;
 use config_load::config::builder::DefaultState;
 use config_load::config::{ConfigBuilder, Environment};
@@ -273,6 +274,12 @@ pub struct SunSettings {
     #[serde(default = "SunSettings::default_illuminance")]
     pub illuminance: f32,
 
+    #[serde(default = "SunSettings::default_angular_size")]
+    pub angular_size: f32,
+
+    #[serde(default = "SunSettings::default_intensity")]
+    pub intensity: f32,
+
     #[serde(default = "SunSettings::default_shadows_enabled")]
     pub shadows_enabled: bool,
 
@@ -287,6 +294,8 @@ impl Default for SunSettings {
     fn default() -> Self {
         Self {
             illuminance: Self::default_illuminance(),
+            angular_size: Self::default_angular_size(),
+            intensity: Self::default_intensity(),
             shadows_enabled: Self::default_shadows_enabled(),
             position: Self::default_position(),
             target: Default::default(),
@@ -297,6 +306,14 @@ impl Default for SunSettings {
 impl SunSettings {
     pub const fn default_illuminance() -> f32 {
         lux::AMBIENT_DAYLIGHT
+    }
+
+    pub const fn default_angular_size() -> f32 {
+        SunDisk::EARTH.angular_size
+    }
+
+    pub const fn default_intensity() -> f32 {
+        SunDisk::EARTH.intensity
     }
 
     pub const fn default_shadows_enabled() -> bool {
@@ -403,6 +420,9 @@ pub struct CameraSettings {
     pub tonemap: Tonemap,
 
     #[serde(default)]
+    pub bloom: BloomSettings,
+
+    #[serde(default)]
     pub follow: CameraFollowSettings,
 }
 
@@ -499,6 +519,50 @@ impl Tonemap {
 impl From<Tonemap> for Tonemapping {
     fn from(value: Tonemap) -> Self {
         value.to_tonemapping()
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, Serialize)]
+#[serde(default)]
+pub struct BloomSettings {
+    #[serde(default = "BloomSettings::default_intensity")]
+    pub intensity: f32,
+
+    #[serde(default = "BloomSettings::default_low_frequency_boost")]
+    pub low_frequency_boost: f32,
+}
+
+impl Default for BloomSettings {
+    fn default() -> Self {
+        Self {
+            intensity: Self::default_intensity(),
+            low_frequency_boost: Self::default_low_frequency_boost(),
+        }
+    }
+}
+
+impl BloomSettings {
+    pub const fn default_intensity() -> f32 {
+        Bloom::NATURAL.intensity
+    }
+
+    pub const fn default_low_frequency_boost() -> f32 {
+        Bloom::NATURAL.low_frequency_boost
+    }
+}
+
+impl From<BloomSettings> for Bloom {
+    fn from(settings: BloomSettings) -> Self {
+        let BloomSettings {
+            intensity,
+            low_frequency_boost,
+        } = settings;
+
+        Bloom {
+            intensity,
+            low_frequency_boost,
+            ..Bloom::NATURAL
+        }
     }
 }
 
