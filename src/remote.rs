@@ -53,17 +53,36 @@
 //! }'
 //! ```
 //!
+//! Сохранить текущие параметры в файл (путь необязателен, по умолчанию `Config.saved.toml`):
+//!
+//! ```text
+//! curl -s http://127.0.0.1:15702 -d '{
+//!   "jsonrpc": "2.0", "id": 4, "method": "checkmate.save_config",
+//!   "params": {"path": "Config.tuned.toml"}
+//! }'
+//! ```
+//!
 //! Список доступных методов — `rpc.discover`, схема зарегистрированных типов —
 //! `registry.schema`: по ней редактор строит UI, не зная о типах игры заранее.
 //!
 //! [brp]: https://docs.rs/bevy_remote
 
+use std::path::PathBuf;
+
 use bevy::app::{App, Plugin};
+use bevy::ecs::system::In;
+use bevy::ecs::world::World;
 use bevy::log::warn;
-use bevy::remote::RemotePlugin;
 use bevy::remote::http::RemoteHttpPlugin;
+use bevy::remote::{BrpError, BrpResult, RemotePlugin};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::config::RemoteSettings;
+use crate::save;
+
+/// Метод BRP, сохраняющий текущие параметры в файл конфигурации.
+pub const SAVE_CONFIG_METHOD: &str = "checkmate.save_config";
 
 pub struct AppRemotePlugin {
     settings: RemoteSettings,
@@ -86,10 +105,35 @@ impl Plugin for AppRemotePlugin {
         }
 
         app.add_plugins((
-            RemotePlugin::default(),
+            RemotePlugin::default().with_method_main(SAVE_CONFIG_METHOD, save_config),
             RemoteHttpPlugin::default().with_address(address).with_port(port),
         ));
 
         warn!("remote params API is enabled and listening on http://{address}:{port}");
     }
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct SaveConfigParams {
+    /// Куда сохранять. По умолчанию — [`save::DEFAULT_SAVE_FILE`].
+    #[serde(default)]
+    pub path: Option<PathBuf>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SaveConfigResult {
+    /// Путь, по которому файл действительно записан.
+    pub path: PathBuf,
+}
+
+/// Обработчик [`SAVE_CONFIG_METHOD`]: сохраняет снимок параметров и отвечает путём к файлу.
+pub fn save_config(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let params: SaveConfigParams = match params {
+        Some(params) => serde_json::from_value(params).map_err(BrpError::internal)?,
+        None => Default::default(),
+    };
+
+    let path = save::save(world, params.path).map_err(|err| BrpError::internal(err.to_string()))?;
+
+    serde_json::to_value(SaveConfigResult { path }).map_err(BrpError::internal)
 }

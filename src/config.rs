@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use bevy::color::Color;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::resource::Resource;
+use bevy::light::SunDisk;
 use bevy::light::light_consts::lux;
-use bevy::light::{GlobalAmbientLight, SunDisk};
 use bevy::math::{Quat, Vec3};
 use bevy::post_process::auto_exposure::AutoExposure;
 use bevy::post_process::bloom::Bloom;
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::AppState;
 use crate::follow::Follower;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct GameSettings {
     #[serde(default = "GameSettings::default_lang")]
@@ -74,6 +74,19 @@ impl GameSettings {
     pub const fn default_flight_altitude() -> f32 {
         1000.0
     }
+}
+
+/// Цвет в конфиге задаётся как sRGB с альфой: `[r, g, b, a]`.
+pub type ColorArray = [f32; 4];
+
+pub fn color_from_array(color: ColorArray) -> Color {
+    let [red, green, blue, alpha] = color;
+    Color::srgba(red, green, blue, alpha)
+}
+
+pub fn color_to_array(color: Color) -> ColorArray {
+    let color = color.to_srgba();
+    [color.red, color.green, color.blue, color.alpha]
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -186,7 +199,7 @@ pub struct JetFireSettings {
     pub intensity: f32,
 
     #[serde(default = "JetFireSettings::default_color")]
-    pub color: [f32; 3],
+    pub color: ColorArray,
 
     #[serde(default = "JetFireSettings::default_radius")]
     pub radius: f32,
@@ -219,8 +232,8 @@ impl JetFireSettings {
         3000000.0
     }
 
-    pub const fn default_color() -> [f32; 3] {
-        [1.0, 0.5, 0.1]
+    pub const fn default_color() -> ColorArray {
+        [1.0, 0.5, 0.1, 1.0]
     }
 
     pub const fn default_radius() -> f32 {
@@ -271,7 +284,7 @@ pub struct Rotation {
     pub to: [f32; 3],
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct TerrainSettings {
     #[serde(default)]
@@ -280,7 +293,7 @@ pub struct TerrainSettings {
     #[serde(default)]
     pub position: [f32; 3],
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotation: Option<Rotation>,
 
     #[serde(default = "TerrainSettings::default_scale")]
@@ -315,7 +328,7 @@ impl TerrainSettings {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct GraphicsSettings {
     #[serde(default = "GraphicsSettings::default_shadow_map_size")]
@@ -336,7 +349,7 @@ impl GraphicsSettings {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct EnvironmentSettings {
     #[serde(default)]
@@ -349,7 +362,7 @@ pub struct EnvironmentSettings {
     pub atmosphere: AtmosphereSettings,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SunSettings {
     #[serde(default = "SunSettings::default_illuminance")]
@@ -406,14 +419,14 @@ impl SunSettings {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AmbientSettings {
     #[serde(default)]
     pub enabled: bool,
 
     #[serde(default = "AmbientSettings::default_color")]
-    pub color: Color,
+    pub color: ColorArray,
 
     #[serde(default = "AmbientSettings::default_brightness")]
     pub brightness: f32,
@@ -434,8 +447,9 @@ impl Default for AmbientSettings {
 }
 
 impl AmbientSettings {
-    pub const fn default_color() -> Color {
-        Color::WHITE
+    pub const fn default_color() -> ColorArray {
+        // Color::WHITE
+        [1.0, 1.0, 1.0, 1.0]
     }
 
     pub const fn default_brightness() -> f32 {
@@ -445,21 +459,9 @@ impl AmbientSettings {
     pub const fn default_affects_lightmapped_meshes() -> bool {
         true
     }
-
-    pub fn to_ambient_light(&self) -> Option<GlobalAmbientLight> {
-        if self.enabled {
-            Some(GlobalAmbientLight {
-                color: self.color,
-                brightness: self.brightness,
-                affects_lightmapped_meshes: self.affects_lightmapped_meshes,
-            })
-        } else {
-            None
-        }
-    }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AtmosphereSettings {
     #[serde(default)]
@@ -485,11 +487,23 @@ impl From<AtmosphereMode> for bevy::pbr::AtmosphereMode {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+impl From<bevy::pbr::AtmosphereMode> for AtmosphereMode {
+    fn from(mode: bevy::pbr::AtmosphereMode) -> Self {
+        match mode {
+            bevy::pbr::AtmosphereMode::LookupTexture => Self::LookupTexture,
+            bevy::pbr::AtmosphereMode::Raymarched => Self::Raymarched,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct CameraSettings {
     #[serde(default)]
     pub exposure: f32,
+
+    #[serde(default = "CameraSettings::default_smoothness_speed")]
+    pub smoothness_speed: f32,
 
     #[serde(default)]
     pub presets: Vec<CameraPresetSettings>,
@@ -507,7 +521,27 @@ pub struct CameraSettings {
     pub follow: CameraFollowSettings,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+impl Default for CameraSettings {
+    fn default() -> Self {
+        Self {
+            exposure: Default::default(),
+            smoothness_speed: Self::default_smoothness_speed(),
+            presets: Default::default(),
+            auto_exposure: Default::default(),
+            tonemap: Default::default(),
+            bloom: Default::default(),
+            follow: Default::default(),
+        }
+    }
+}
+
+impl CameraSettings {
+    pub const fn default_smoothness_speed() -> f32 {
+        8.0
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct CameraPresetSettings {
     #[serde(default)]
@@ -531,13 +565,13 @@ pub struct AutoExposureSettings {
     #[serde(default)]
     pub enabled: bool,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub range: Option<RangeInclusive<f32>>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speed_brighten: Option<f32>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speed_darken: Option<f32>,
 }
 
@@ -580,6 +614,7 @@ pub enum Tonemap {
     SomewhatBoringDisplayTransform,
     TonyMcMapface,
     BlenderFilmic,
+    KhronosPbrNeutral,
 }
 
 impl Tonemap {
@@ -593,6 +628,7 @@ impl Tonemap {
             Self::SomewhatBoringDisplayTransform => Tonemapping::SomewhatBoringDisplayTransform,
             Self::TonyMcMapface => Tonemapping::TonyMcMapface,
             Self::BlenderFilmic => Tonemapping::BlenderFilmic,
+            Self::KhronosPbrNeutral => Tonemapping::KhronosPbrNeutral,
         }
     }
 }
@@ -600,6 +636,22 @@ impl Tonemap {
 impl From<Tonemap> for Tonemapping {
     fn from(value: Tonemap) -> Self {
         value.to_tonemapping()
+    }
+}
+
+impl From<Tonemapping> for Tonemap {
+    fn from(value: Tonemapping) -> Self {
+        match value {
+            Tonemapping::None => Self::None,
+            Tonemapping::Reinhard => Self::Reinhard,
+            Tonemapping::ReinhardLuminance => Self::ReinhardLuminance,
+            Tonemapping::AcesFitted => Self::AcesFitted,
+            Tonemapping::AgX => Self::AgX,
+            Tonemapping::SomewhatBoringDisplayTransform => Self::SomewhatBoringDisplayTransform,
+            Tonemapping::TonyMcMapface => Self::TonyMcMapface,
+            Tonemapping::BlenderFilmic => Self::BlenderFilmic,
+            Tonemapping::KhronosPbrNeutral => Self::KhronosPbrNeutral,
+        }
     }
 }
 
@@ -647,7 +699,7 @@ impl From<BloomSettings> for Bloom {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct CameraFollowSettings {
     #[serde(default = "CameraFollowSettings::default_distance")]
@@ -721,12 +773,13 @@ impl RemoteSettings {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct LoggerSettings {
     #[serde(default = "LoggerSettings::default_spec")]
     pub spec: String,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
 
     pub duplicate_to_stdout: bool,
@@ -756,7 +809,7 @@ impl LoggerSettings {
     }
 }
 
-#[derive(Default, Debug, Deserialize, Serialize, Resource)]
+#[derive(Clone, Default, Debug, Deserialize, Serialize, Resource)]
 #[serde(default)]
 pub struct Config {
     #[serde(default)]

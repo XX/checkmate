@@ -44,6 +44,18 @@ impl From<&AircraftSettings> for AircraftParams {
     }
 }
 
+impl AircraftParams {
+    pub fn to_settings(&self, thrust: &ThrustParams) -> AircraftSettings {
+        AircraftSettings {
+            max_speed: self.max_speed,
+            roll_speed: self.roll_speed,
+            pitch_speed: self.pitch_speed,
+            yaw_speed: self.yaw_speed,
+            thrust: thrust.into(),
+        }
+    }
+}
+
 /// Параметры тяги, изменяемые во время игры.
 #[derive(Component, Reflect, Debug, Clone, Copy)]
 #[reflect(Component)]
@@ -60,6 +72,15 @@ impl From<&ThrustSettings> for ThrustParams {
         Self {
             max_force: settings.max_force,
             change_speed: settings.change_speed,
+        }
+    }
+}
+
+impl From<&ThrustParams> for ThrustSettings {
+    fn from(params: &ThrustParams) -> Self {
+        Self {
+            max_force: params.max_force,
+            change_speed: params.change_speed,
         }
     }
 }

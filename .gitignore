@@ -3,7 +3,7 @@
 
 /tmp
 /assets/models/
-Config.toml
+Config*
 
 TODO.*
 NOTE.*

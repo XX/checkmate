@@ -17,7 +17,7 @@ use bevy::ecs::schedule::{IntoScheduleConfigs, SystemSet};
 use crate::camera::panorbit::{PanOrbitCamera, PanOrbitCameraTarget};
 use crate::camera::simple::SimpleCamera;
 use crate::camera::{self, CameraParams};
-use crate::environment::{self, Sun, SunParams};
+use crate::environment::{self, AmbientParams, Sun, SunParams};
 use crate::follow::{Followee, Follower, PreviousTransform};
 use crate::state::ingame::aircraft::{Aircraft, AircraftParams, Movement, Thrust, ThrustParams};
 use crate::state::ingame::engine::{self, FlickeringLight, FlickeringParams, JetFireParams};
@@ -31,9 +31,11 @@ pub struct ParamsPlugin;
 
 impl Plugin for ParamsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CameraParams>()
+        app.init_resource::<AmbientParams>()
+            .init_resource::<CameraParams>()
             // Параметры
             .register_type::<AircraftParams>()
+            .register_type::<AmbientParams>()
             .register_type::<CameraParams>()
             .register_type::<FlickeringParams>()
             .register_type::<JetFireParams>()
@@ -56,6 +58,7 @@ impl Plugin for ParamsPlugin {
             .add_systems(
                 PreUpdate,
                 (
+                    environment::apply_ambient,
                     environment::apply_sun,
                     camera::apply_camera_params,
                     engine::apply_jet_fire,

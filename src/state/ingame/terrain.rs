@@ -11,7 +11,7 @@ use bevy::reflect::std_traits::ReflectDefault;
 use bevy::transform::components::Transform;
 use bevy::world_serialization::WorldAssetRoot;
 
-use crate::config::{Config, TerrainSettings};
+use crate::config::{Config, Rotation, TerrainSettings};
 use crate::state::ingame::GameData;
 use crate::state::{SceneKey, Scenes};
 
@@ -45,6 +45,32 @@ impl From<&TerrainSettings> for TerrainParams {
 }
 
 impl TerrainParams {
+    /// Собирает настройки для сохранения в конфиг.
+    ///
+    /// Путь к модели структурный, поэтому берётся из `base`, оттуда же берётся исходная ось
+    /// `from`: конфиг задаёт поворот парой векторов, и по кватерниону однозначно
+    /// восстанавливается только `to`. Крен вокруг оси `from`–`to`, если его задали правкой
+    /// кватерниона напрямую, в такой записи не сохраняется.
+    pub fn to_settings(&self, base: &TerrainSettings) -> TerrainSettings {
+        let from = base
+            .rotation
+            .map(|rotation| Vec3::from(rotation.from))
+            .unwrap_or(Vec3::Z)
+            .normalize();
+
+        let rotation = (self.rotation != Quat::IDENTITY).then(|| Rotation {
+            from: from.into(),
+            to: (self.rotation * from).into(),
+        });
+
+        TerrainSettings {
+            model: base.model.clone(),
+            position: self.position.into(),
+            rotation,
+            scale: self.scale,
+        }
+    }
+
     pub fn transform(&self) -> Transform {
         Transform::from_translation(self.position)
             .with_rotation(self.rotation)

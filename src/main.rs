@@ -24,8 +24,10 @@ use clap::Parser;
 use crate::camera::{AppCameraParams, AppCameraPlugin, CameraParams};
 use crate::config::Config;
 use crate::diagnostics::DiagnosticsPlugin;
+use crate::environment::AmbientParams;
 use crate::params::ParamsPlugin;
 use crate::remote::AppRemotePlugin;
+use crate::save::SaveConfigPlugin;
 use crate::state::ingame::animation::AdditionalPlayers;
 use crate::state::{AppState, Scenes, hangar, ingame};
 
@@ -37,6 +39,7 @@ mod environment;
 mod follow;
 mod params;
 mod remote;
+mod save;
 mod state;
 mod utils;
 
@@ -48,7 +51,7 @@ fn main() {
     });
 
     let camera_params = AppCameraParams::default()
-        .with_smoothness_speed(8.0)
+        .with_smoothness_speed(config.camera.smoothness_speed)
         .with_tonemapping(config.camera.tonemap)
         .with_bloom(config.camera.bloom)
         .with_follower(config.camera.follow.to_follower());
@@ -83,11 +86,8 @@ fn main() {
 
     let mut app = App::new();
 
-    if let Some(ambient_light) = config.environment.ambient.to_ambient_light() {
-        app.insert_resource(ambient_light);
-    }
-
-    app.insert_resource(CameraParams::from_config(&config))
+    app.insert_resource(AmbientParams::from(&config.environment.ambient))
+        .insert_resource(CameraParams::from_config(&config))
         .insert_resource(camera_params)
         .insert_resource(DirectionalLightShadowMap {
             size: config.graphics.shadow_map_size,
@@ -102,6 +102,7 @@ fn main() {
             DiagnosticsPlugin,
             AppCameraPlugin,
             ParamsPlugin,
+            SaveConfigPlugin,
             remote_plugin,
         ))
         .init_state::<AppState>()

@@ -10,7 +10,7 @@ use bevy::reflect::Reflect;
 use bevy::time::{Time, Timer, TimerMode};
 use bevy::transform::components::Transform;
 
-use crate::config::{Config, FlickeringSettings, JetFireSettings};
+use crate::config::{Config, FlickeringSettings, JetFireSettings, color_from_array, color_to_array};
 use crate::state::ingame::GameData;
 
 #[derive(Component, Reflect)]
@@ -62,11 +62,33 @@ impl From<&JetFireSettings> for JetFireParams {
     fn from(settings: &JetFireSettings) -> Self {
         Self {
             intensity: settings.intensity,
-            color: Color::srgb_from_array(settings.color),
+            color: color_from_array(settings.color),
             radius: settings.radius,
             range: settings.range,
             position: settings.position.into(),
             flickering: (&settings.flickering).into(),
+        }
+    }
+}
+
+impl From<&FlickeringParams> for FlickeringSettings {
+    fn from(params: &FlickeringParams) -> Self {
+        Self {
+            variation: params.variation,
+            frequency: params.frequency,
+        }
+    }
+}
+
+impl From<&JetFireParams> for JetFireSettings {
+    fn from(params: &JetFireParams) -> Self {
+        Self {
+            intensity: params.intensity,
+            color: color_to_array(params.color),
+            radius: params.radius,
+            range: params.range,
+            position: params.position.into(),
+            flickering: (&params.flickering).into(),
         }
     }
 }

@@ -171,6 +171,7 @@ impl Default for CameraParams {
 impl CameraParams {
     pub fn from_config(config: &Config) -> Self {
         Self {
+            smoothness_speed: config.camera.smoothness_speed,
             exposure_ev100: config.camera.exposure,
             bloom_intensity: config.camera.bloom.intensity,
             bloom_low_frequency_boost: config.camera.bloom.low_frequency_boost,
@@ -178,6 +179,18 @@ impl CameraParams {
             atmosphere_mode: config.environment.atmosphere.render_mode.into(),
             ..Default::default()
         }
+    }
+}
+
+impl CameraParams {
+    /// Переносит параметры в снимок настроек для сохранения в файл конфигурации.
+    pub fn write_to(&self, config: &mut Config) {
+        config.camera.smoothness_speed = self.smoothness_speed;
+        config.camera.exposure = self.exposure_ev100;
+        config.camera.bloom.intensity = self.bloom_intensity;
+        config.camera.bloom.low_frequency_boost = self.bloom_low_frequency_boost;
+        config.camera.tonemap = self.tonemapping.into();
+        config.environment.atmosphere.render_mode = self.atmosphere_mode.into();
     }
 }
 

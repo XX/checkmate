@@ -1,16 +1,19 @@
+use bevy::color::Color;
+use bevy::ecs::change_detection::DetectChanges;
 use bevy::ecs::component::Component;
 use bevy::ecs::name::Name;
 use bevy::ecs::query::Changed;
-use bevy::ecs::reflect::ReflectComponent;
-use bevy::ecs::system::{Commands, Query, Res};
-use bevy::light::{DirectionalLight, SunDisk};
+use bevy::ecs::reflect::{ReflectComponent, ReflectResource};
+use bevy::ecs::resource::Resource;
+use bevy::ecs::system::{Commands, Query, Res, ResMut};
+use bevy::light::{DirectionalLight, GlobalAmbientLight, SunDisk};
 use bevy::math::Vec3;
 use bevy::prelude::default;
 use bevy::reflect::Reflect;
 use bevy::reflect::std_traits::ReflectDefault;
 use bevy::transform::components::Transform;
 
-use crate::config::{Config, SunSettings};
+use crate::config::{AmbientSettings, Config, SunSettings, color_from_array, color_to_array};
 
 #[derive(Component, Reflect, Debug, Default, Clone, Copy)]
 #[reflect(Component, Default)]
@@ -45,6 +48,19 @@ impl From<&SunSettings> for SunParams {
             shadows_enabled: settings.shadows_enabled,
             position: settings.position.into(),
             target: settings.target.into(),
+        }
+    }
+}
+
+impl From<&SunParams> for SunSettings {
+    fn from(params: &SunParams) -> Self {
+        Self {
+            illuminance: params.illuminance,
+            angular_size: params.angular_size,
+            intensity: params.intensity,
+            shadows_enabled: params.shadows_enabled,
+            position: params.position.into(),
+            target: params.target.into(),
         }
     }
 }
@@ -91,4 +107,72 @@ pub fn apply_sun(
         *sun_disk = params.sun_disk();
         *transform = params.transform();
     }
+}
+
+/// Параметры фонового света.
+///
+/// Источник истины для ресурса [`GlobalAmbientLight`]: изменение полей применяется системой
+/// [`apply_ambient`]. Ресурс, а не компонент, потому что фоновый свет в bevy — тоже ресурс.
+#[derive(Resource, Reflect, Debug, Clone, Copy)]
+#[reflect(Resource)]
+pub struct AmbientParams {
+    pub enabled: bool,
+
+    pub color: Color,
+
+    pub brightness: f32,
+
+    pub affects_lightmapped_meshes: bool,
+}
+
+impl Default for AmbientParams {
+    fn default() -> Self {
+        Self::from(&AmbientSettings::default())
+    }
+}
+
+impl From<&AmbientSettings> for AmbientParams {
+    fn from(settings: &AmbientSettings) -> Self {
+        Self {
+            enabled: settings.enabled,
+            color: color_from_array(settings.color),
+            brightness: settings.brightness,
+            affects_lightmapped_meshes: settings.affects_lightmapped_meshes,
+        }
+    }
+}
+
+impl From<&AmbientParams> for AmbientSettings {
+    fn from(params: &AmbientParams) -> Self {
+        Self {
+            enabled: params.enabled,
+            color: color_to_array(params.color),
+            brightness: params.brightness,
+            affects_lightmapped_meshes: params.affects_lightmapped_meshes,
+        }
+    }
+}
+
+impl AmbientParams {
+    /// Выключенный фоновый свет оставляет значение bevy по умолчанию — так же, как когда
+    /// секция конфига выключена и игра ничего не вставляет в мир сама.
+    pub fn global_ambient_light(&self) -> GlobalAmbientLight {
+        if self.enabled {
+            GlobalAmbientLight {
+                color: self.color,
+                brightness: self.brightness,
+                affects_lightmapped_meshes: self.affects_lightmapped_meshes,
+            }
+        } else {
+            GlobalAmbientLight::default()
+        }
+    }
+}
+
+pub fn apply_ambient(params: Res<AmbientParams>, mut ambient_light: ResMut<GlobalAmbientLight>) {
+    if !params.is_changed() {
+        return;
+    }
+
+    *ambient_light = params.global_ambient_light();
 }
