@@ -3,9 +3,11 @@ use bevy::asset::Assets;
 use bevy::camera::{Camera, Camera3d, ClearColorConfig, Exposure, PerspectiveProjection, Projection};
 use bevy::color::Color;
 use bevy::core_pipeline::tonemapping::Tonemapping;
+use bevy::ecs::change_detection::DetectChanges;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::name::Name;
 use bevy::ecs::query::{With, Without};
+use bevy::ecs::reflect::ReflectResource;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::system::{Commands, Query, Res, ResMut};
@@ -14,9 +16,10 @@ use bevy::input::keyboard::KeyCode;
 use bevy::light::Atmosphere;
 use bevy::light::atmosphere::ScatteringMedium;
 use bevy::math::{Dir3, Vec3};
-use bevy::pbr::AtmosphereSettings;
+use bevy::pbr::{AtmosphereMode, AtmosphereSettings};
 use bevy::post_process::auto_exposure::{AutoExposure, AutoExposurePlugin};
 use bevy::post_process::bloom::Bloom;
+use bevy::reflect::Reflect;
 use bevy::transform::components::Transform;
 use bevy_inspector_egui::bevy_egui::PrimaryEguiContext;
 
@@ -126,6 +129,86 @@ impl AppCameraParams {
     pub fn with_follower(mut self, follower: Follower) -> Self {
         self.follower = follower;
         self
+    }
+}
+
+/// Параметры камеры, изменяемые во время игры.
+///
+/// Источник истины для [`Exposure`], [`Tonemapping`], [`Bloom`], [`AtmosphereSettings`]
+/// и сглаживания [`PanOrbitCamera`] активной камеры: изменение полей применяется системой
+/// [`apply_camera_params`]. Ресурс, а не компонент, чтобы правки переживали пересоздание
+/// камеры в [`respawn_panorbit`].
+// `Debug` не выводится: `AtmosphereMode` его не реализует.
+#[derive(Clone, Copy, Reflect, Resource)]
+#[reflect(Resource)]
+pub struct CameraParams {
+    pub smoothness_speed: f32,
+
+    pub exposure_ev100: f32,
+
+    pub bloom_intensity: f32,
+
+    pub bloom_low_frequency_boost: f32,
+
+    pub tonemapping: Tonemapping,
+
+    pub atmosphere_mode: AtmosphereMode,
+}
+
+impl Default for CameraParams {
+    fn default() -> Self {
+        Self {
+            smoothness_speed: PanOrbitCamera::default().smoothness_speed,
+            exposure_ev100: Exposure::default().ev100,
+            bloom_intensity: Bloom::NATURAL.intensity,
+            bloom_low_frequency_boost: Bloom::NATURAL.low_frequency_boost,
+            tonemapping: Tonemapping::default(),
+            atmosphere_mode: AtmosphereMode::default(),
+        }
+    }
+}
+
+impl CameraParams {
+    pub fn from_config(config: &Config) -> Self {
+        Self {
+            exposure_ev100: config.camera.exposure,
+            bloom_intensity: config.camera.bloom.intensity,
+            bloom_low_frequency_boost: config.camera.bloom.low_frequency_boost,
+            tonemapping: config.camera.tonemap.into(),
+            atmosphere_mode: config.environment.atmosphere.render_mode.into(),
+            ..Default::default()
+        }
+    }
+}
+
+pub fn apply_camera_params(
+    params: Res<CameraParams>,
+    mut query: Query<(
+        &mut PanOrbitCamera,
+        &mut Exposure,
+        &mut Tonemapping,
+        &mut Bloom,
+        Option<&mut AtmosphereSettings>,
+    )>,
+) {
+    let params_changed = params.is_changed();
+
+    for (mut camera, mut exposure, mut tonemapping, mut bloom, atmosphere) in &mut query {
+        // Камера пересоздаётся при смене состояния игры, поэтому параметры применяются
+        // не только при их изменении, но и к только что появившейся камере.
+        if !params_changed && !camera.is_added() {
+            continue;
+        }
+
+        camera.smoothness_speed = params.smoothness_speed;
+        exposure.ev100 = params.exposure_ev100;
+        *tonemapping = params.tonemapping;
+        bloom.intensity = params.bloom_intensity;
+        bloom.low_frequency_boost = params.bloom_low_frequency_boost;
+
+        if let Some(mut atmosphere) = atmosphere {
+            atmosphere.rendering_method = params.atmosphere_mode;
+        }
     }
 }
 

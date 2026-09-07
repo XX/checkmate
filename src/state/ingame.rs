@@ -14,7 +14,7 @@ use bevy::world_serialization::WorldAssetRoot;
 use crate::camera::{self, AppCameraEntity, AppCameraParams};
 use crate::config::Config;
 use crate::follow::{Followee, PreviousTransform};
-use crate::state::ingame::aircraft::{Aircraft, Movement, Thrust};
+use crate::state::ingame::aircraft::{Aircraft, AircraftParams, Movement, Thrust, ThrustParams};
 use crate::state::ingame::animation::{AdditionalPlayers, attach_animations};
 use crate::state::{SceneKey, Scenes};
 
@@ -50,7 +50,9 @@ pub fn setup(
     let transform = Transform::from_translation(Vec3::ZERO.with_y(altitude));
     let entity_id = commands
         .spawn((
-            Aircraft::new(),
+            Aircraft,
+            AircraftParams::from(&config.game.aircraft),
+            ThrustParams::from(&config.game.aircraft.thrust),
             Thrust::new(),
             Movement::default(),
             Followee,

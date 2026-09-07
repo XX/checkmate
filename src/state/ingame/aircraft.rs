@@ -1,13 +1,26 @@
 use bevy::ecs::component::Component;
+use bevy::ecs::reflect::ReflectComponent;
 use bevy::ecs::system::{Query, Res};
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::math::{EulerRot, Quat, Vec3};
+use bevy::reflect::Reflect;
+use bevy::reflect::std_traits::ReflectDefault;
 use bevy::time::Time;
 use bevy::transform::components::Transform;
 
-#[derive(Component, Debug, Clone)]
-pub struct Aircraft {
+use crate::config::{AircraftSettings, ThrustSettings};
+
+#[derive(Component, Reflect, Debug, Default, Clone, Copy)]
+#[reflect(Component, Default)]
+pub struct Aircraft;
+
+/// Параметры управляемости самолёта, изменяемые во время игры.
+///
+/// Читаются системами каждый кадр, поэтому применяются без системы применения.
+#[derive(Component, Reflect, Debug, Clone, Copy)]
+#[reflect(Component)]
+pub struct AircraftParams {
     pub max_speed: f32,
 
     // Скорость крена
@@ -20,25 +33,21 @@ pub struct Aircraft {
     pub yaw_speed: f32,
 }
 
-impl Aircraft {
-    pub fn new() -> Self {
+impl From<&AircraftSettings> for AircraftParams {
+    fn from(settings: &AircraftSettings) -> Self {
         Self {
-            max_speed: 100.0,
-            roll_speed: 3.0,
-            pitch_speed: 2.0,
-            yaw_speed: 1.0,
+            max_speed: settings.max_speed,
+            roll_speed: settings.roll_speed,
+            pitch_speed: settings.pitch_speed,
+            yaw_speed: settings.yaw_speed,
         }
     }
 }
 
-#[derive(Component, Debug, Clone)]
-pub struct Thrust {
-    // Текущая тяга (0..1)
-    pub current: f32,
-
-    // Целевая тяга (0..1)
-    pub target: f32,
-
+/// Параметры тяги, изменяемые во время игры.
+#[derive(Component, Reflect, Debug, Clone, Copy)]
+#[reflect(Component)]
+pub struct ThrustParams {
     // Максимальная сила тяги
     pub max_force: f32,
 
@@ -46,30 +55,52 @@ pub struct Thrust {
     pub change_speed: f32,
 }
 
+impl From<&ThrustSettings> for ThrustParams {
+    fn from(settings: &ThrustSettings) -> Self {
+        Self {
+            max_force: settings.max_force,
+            change_speed: settings.change_speed,
+        }
+    }
+}
+
+/// Текущее состояние тяги (не параметр: изменяется самой игрой).
+#[derive(Component, Reflect, Debug, Clone, Copy)]
+#[reflect(Component)]
+pub struct Thrust {
+    // Текущая тяга (0..1)
+    pub current: f32,
+
+    // Целевая тяга (0..1)
+    pub target: f32,
+}
+
 impl Thrust {
     pub fn new() -> Self {
         Self {
             current: 0.0,
             target: 20.0,
-            max_force: 100.0,
-            change_speed: 2.0,
         }
     }
 }
 
-#[derive(Component, Default, Clone, Copy)]
+#[derive(Component, Reflect, Default, Clone, Copy)]
+#[reflect(Component, Default)]
 pub struct Movement {
     pub velocity: Vec3,
     pub rotation_speed: Vec3,
 }
 
-pub fn movement(mut query: Query<(&mut Transform, &mut Movement, &Thrust, &Aircraft)>, time: Res<Time>) {
-    for (mut transform, mut movement, thrust, aircraft) in &mut query {
+pub fn movement(
+    mut query: Query<(&mut Transform, &mut Movement, &Thrust, &ThrustParams, &AircraftParams)>,
+    time: Res<Time>,
+) {
+    for (mut transform, mut movement, thrust, thrust_params, params) in &mut query {
         // Направление самолета (вперед по локальной оси Z)
         let direction = transform.rotation * Vec3::Z;
 
         // Сила тяги
-        let acceleration = direction * thrust.current * thrust.max_force;
+        let acceleration = direction * thrust.current * thrust_params.max_force;
         movement.velocity += acceleration * time.delta_secs();
 
         // Аэродинамическое сопротивление (упрощенное)
@@ -77,8 +108,8 @@ pub fn movement(mut query: Query<(&mut Transform, &mut Movement, &Thrust, &Aircr
         movement.velocity -= drag * time.delta_secs();
 
         // Ограничиваем максимальную скорость
-        if movement.velocity.length() > aircraft.max_speed {
-            movement.velocity = movement.velocity.normalize() * aircraft.max_speed;
+        if movement.velocity.length() > params.max_speed {
+            movement.velocity = movement.velocity.normalize() * params.max_speed;
         }
 
         // Применяем скорость к позиции
@@ -88,34 +119,34 @@ pub fn movement(mut query: Query<(&mut Transform, &mut Movement, &Thrust, &Aircr
 
 pub fn rotation(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut Transform, &mut Movement, &Aircraft)>,
+    mut query: Query<(&mut Transform, &mut Movement, &AircraftParams)>,
     time: Res<Time>,
 ) {
-    for (mut transform, mut movement, aircraft) in &mut query {
+    for (mut transform, mut movement, params) in &mut query {
         let mut rotation = Vec3::ZERO;
 
         // Управление рысканием (A/D)
         if keyboard_input.pressed(KeyCode::KeyA) {
-            rotation.y += aircraft.yaw_speed;
+            rotation.y += params.yaw_speed;
         }
         if keyboard_input.pressed(KeyCode::KeyD) {
-            rotation.y -= aircraft.yaw_speed;
+            rotation.y -= params.yaw_speed;
         }
 
         // Управление тангажом (Up/Down)
         if keyboard_input.pressed(KeyCode::ArrowUp) {
-            rotation.x += aircraft.pitch_speed;
+            rotation.x += params.pitch_speed;
         }
         if keyboard_input.pressed(KeyCode::ArrowDown) {
-            rotation.x -= aircraft.pitch_speed;
+            rotation.x -= params.pitch_speed;
         }
 
         // Управление креном (Left/Right)
         if keyboard_input.pressed(KeyCode::ArrowLeft) {
-            rotation.z -= aircraft.roll_speed;
+            rotation.z -= params.roll_speed;
         }
         if keyboard_input.pressed(KeyCode::ArrowRight) {
-            rotation.z += aircraft.roll_speed;
+            rotation.z += params.roll_speed;
         }
 
         // Применяем поворот
@@ -136,8 +167,12 @@ pub fn rotation(
     }
 }
 
-pub fn update_thrust(keyboard_input: Res<ButtonInput<KeyCode>>, mut query: Query<&mut Thrust>, time: Res<Time>) {
-    for mut thrust in &mut query {
+pub fn update_thrust(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut query: Query<(&mut Thrust, &ThrustParams)>,
+    time: Res<Time>,
+) {
+    for (mut thrust, params) in &mut query {
         // Управление тягой клавишами W/S или PageUp/PageDown
         if keyboard_input.pressed(KeyCode::KeyW) || keyboard_input.pressed(KeyCode::PageUp) {
             thrust.target = (thrust.target + time.delta_secs()).min(1.0);
@@ -147,6 +182,6 @@ pub fn update_thrust(keyboard_input: Res<ButtonInput<KeyCode>>, mut query: Query
         }
 
         // Плавное изменение тяги
-        thrust.current = thrust.current + (thrust.target - thrust.current) * thrust.change_speed * time.delta_secs();
+        thrust.current = thrust.current + (thrust.target - thrust.current) * params.change_speed * time.delta_secs();
     }
 }

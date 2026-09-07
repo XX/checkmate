@@ -3,10 +3,13 @@ use std::f32::consts;
 use bevy::camera::Projection;
 use bevy::ecs::component::Component;
 use bevy::ecs::message::MessageReader;
+use bevy::ecs::reflect::ReflectComponent;
 use bevy::ecs::system::{Query, Res};
 use bevy::input::ButtonInput;
 use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::math::{Mat3, Quat, Vec2, Vec3};
+use bevy::reflect::Reflect;
+use bevy::reflect::std_traits::ReflectDefault;
 use bevy::time::Time;
 use bevy::transform::components::Transform;
 use bevy::window::Window;
@@ -14,7 +17,8 @@ use bevy_inspector_egui::bevy_egui::EguiContexts;
 
 use crate::camera::LookingAt;
 
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Reflect, Clone, Debug)]
+#[reflect(Component, Default)]
 pub struct PanOrbitCameraTarget {
     pub focus: Vec3,
     pub radius: f32,
@@ -45,7 +49,8 @@ impl PanOrbitCameraTarget {
     }
 }
 
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Reflect, Clone, Debug)]
+#[reflect(Component, Default)]
 pub struct PanOrbitCamera {
     /// The "focus point" to orbit around. It is automatically updated when panning the camera
     pub focus: Vec3,

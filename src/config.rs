@@ -9,7 +9,6 @@ use bevy::light::{GlobalAmbientLight, SunDisk};
 use bevy::math::{Quat, Vec3};
 use bevy::post_process::auto_exposure::AutoExposure;
 use bevy::post_process::bloom::Bloom;
-use bevy::transform::components::Transform;
 use config_load::config::builder::DefaultState;
 use config_load::config::{ConfigBuilder, Environment};
 use config_load::{ConfigLoader, FileLocation, Load};
@@ -37,6 +36,9 @@ pub struct GameSettings {
     pub flight_altitude: f32,
 
     #[serde(default)]
+    pub aircraft: AircraftSettings,
+
+    #[serde(default)]
     pub terrain: TerrainSettings,
 
     #[serde(default)]
@@ -51,6 +53,7 @@ impl Default for GameSettings {
             hangar_model: Default::default(),
             flying_model: Default::default(),
             flight_altitude: Self::default_flight_altitude(),
+            aircraft: Default::default(),
             terrain: Default::default(),
             state: Default::default(),
         }
@@ -68,6 +71,84 @@ impl GameSettings {
 
     pub const fn default_flight_altitude() -> f32 {
         1000.0
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct AircraftSettings {
+    #[serde(default = "AircraftSettings::default_max_speed")]
+    pub max_speed: f32,
+
+    #[serde(default = "AircraftSettings::default_roll_speed")]
+    pub roll_speed: f32,
+
+    #[serde(default = "AircraftSettings::default_pitch_speed")]
+    pub pitch_speed: f32,
+
+    #[serde(default = "AircraftSettings::default_yaw_speed")]
+    pub yaw_speed: f32,
+
+    #[serde(default)]
+    pub thrust: ThrustSettings,
+}
+
+impl Default for AircraftSettings {
+    fn default() -> Self {
+        Self {
+            max_speed: Self::default_max_speed(),
+            roll_speed: Self::default_roll_speed(),
+            pitch_speed: Self::default_pitch_speed(),
+            yaw_speed: Self::default_yaw_speed(),
+            thrust: Default::default(),
+        }
+    }
+}
+
+impl AircraftSettings {
+    pub const fn default_max_speed() -> f32 {
+        100.0
+    }
+
+    pub const fn default_roll_speed() -> f32 {
+        3.0
+    }
+
+    pub const fn default_pitch_speed() -> f32 {
+        2.0
+    }
+
+    pub const fn default_yaw_speed() -> f32 {
+        1.0
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ThrustSettings {
+    #[serde(default = "ThrustSettings::default_max_force")]
+    pub max_force: f32,
+
+    #[serde(default = "ThrustSettings::default_change_speed")]
+    pub change_speed: f32,
+}
+
+impl Default for ThrustSettings {
+    fn default() -> Self {
+        Self {
+            max_force: Self::default_max_force(),
+            change_speed: Self::default_change_speed(),
+        }
+    }
+}
+
+impl ThrustSettings {
+    pub const fn default_max_force() -> f32 {
+        100.0
+    }
+
+    pub const fn default_change_speed() -> f32 {
+        2.0
     }
 }
 
@@ -220,17 +301,15 @@ impl TerrainSettings {
         1.0
     }
 
-    pub fn get_transform(&self) -> Transform {
+    pub fn get_rotation(&self) -> Quat {
         if let Some(rotation) = self.rotation {
-            Transform::from_rotation(Quat::from_rotation_arc(
+            Quat::from_rotation_arc(
                 Vec3::from(rotation.from).normalize(),
                 Vec3::from(rotation.to).normalize(),
-            ))
+            )
         } else {
-            Transform::default()
+            Quat::IDENTITY
         }
-        .with_translation(self.position.into())
-        .with_scale(Vec3::splat(self.scale))
     }
 }
 

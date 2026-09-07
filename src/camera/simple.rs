@@ -2,10 +2,13 @@ use bevy::app::{App, Plugin, Startup, Update};
 use bevy::camera::{Camera, Camera3d};
 use bevy::ecs::component::Component;
 use bevy::ecs::message::MessageReader;
+use bevy::ecs::reflect::ReflectComponent;
 use bevy::ecs::system::{Commands, Query, Res};
 use bevy::input::ButtonInput;
 use bevy::input::mouse::{MouseButton, MouseMotion, MouseWheel};
 use bevy::math::{EulerRot, Quat, Vec3};
+use bevy::reflect::Reflect;
+use bevy::reflect::std_traits::ReflectDefault;
 use bevy::time::Time;
 use bevy::transform::components::Transform;
 
@@ -17,7 +20,8 @@ impl Plugin for SimpleCameraPlugin {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component, Default)]
 pub struct SimpleCamera {
     pub rotation: Quat,
     pub zoom: f32,

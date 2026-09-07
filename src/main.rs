@@ -2,7 +2,6 @@ use bevy::DefaultPlugins;
 use bevy::app::{App, Startup, Update};
 use bevy::camera::{ClearColorConfig, Exposure};
 use bevy::color::Color;
-use bevy::ecs::component::Component;
 use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::ecs::schedule::common_conditions::{resource_exists, run_once};
 use bevy::ecs::system::{Commands, Query, Res, ResMut};
@@ -10,23 +9,22 @@ use bevy::input::ButtonInput;
 use bevy::input::common_conditions::input_toggle_active;
 use bevy::input::keyboard::KeyCode;
 use bevy::light::atmosphere::ScatteringMedium;
-use bevy::light::{Atmosphere, DirectionalLight, DirectionalLightShadowMap, SunDisk};
-use bevy::math::Vec3;
+use bevy::light::{Atmosphere, DirectionalLightShadowMap};
 use bevy::pbr::AtmosphereSettings;
-use bevy::prelude::{Entity, default};
+use bevy::prelude::Entity;
 use bevy::state::app::AppExtStates;
 use bevy::state::condition::in_state;
 use bevy::state::state::{NextState, OnEnter, OnExit};
-use bevy::transform::components::Transform;
 use bevy::window::Window;
 use bevy_inspector_egui::bevy_egui::{EguiGlobalSettings, EguiPlugin};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_obj::ObjPlugin;
 use clap::Parser;
 
-use crate::camera::{AppCameraParams, AppCameraPlugin};
+use crate::camera::{AppCameraParams, AppCameraPlugin, CameraParams};
 use crate::config::Config;
 use crate::diagnostics::DiagnosticsPlugin;
+use crate::params::ParamsPlugin;
 use crate::state::ingame::animation::AdditionalPlayers;
 use crate::state::{AppState, Scenes, hangar, ingame};
 
@@ -34,7 +32,9 @@ mod camera;
 mod cli;
 mod config;
 mod diagnostics;
+mod environment;
 mod follow;
+mod params;
 mod state;
 mod utils;
 
@@ -83,7 +83,8 @@ fn main() {
         app.insert_resource(ambient_light);
     }
 
-    app.insert_resource(camera_params)
+    app.insert_resource(CameraParams::from_config(&config))
+        .insert_resource(camera_params)
         .insert_resource(DirectionalLightShadowMap {
             size: config.graphics.shadow_map_size,
         })
@@ -96,9 +97,10 @@ fn main() {
             ObjPlugin,
             DiagnosticsPlugin,
             AppCameraPlugin,
+            ParamsPlugin,
         ))
         .init_state::<AppState>()
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, environment::setup))
         .add_systems(
             OnEnter(AppState::Hangar),
             (
@@ -145,32 +147,13 @@ fn main() {
         .run();
 }
 
-#[derive(Component)]
-struct Sun;
-
 fn setup(
-    mut commands: Commands,
     config: Res<Config>,
     mut egui_global_settings: ResMut<EguiGlobalSettings>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
     // Disable the automatic creation of a primary context to set it up manually for the camera we need.
     egui_global_settings.auto_create_primary_context = false;
-
-    commands.spawn((
-        Sun,
-        DirectionalLight {
-            shadow_maps_enabled: config.environment.sun.shadows_enabled,
-            illuminance: config.environment.sun.illuminance,
-            ..default()
-        },
-        SunDisk {
-            angular_size: config.environment.sun.angular_size,
-            intensity: config.environment.sun.intensity,
-        },
-        Transform::from_translation(config.environment.sun.position.into())
-            .looking_at(config.environment.sun.target.into(), Vec3::Y),
-    ));
 
     next_state.set(config.game.state);
 }
