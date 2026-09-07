@@ -25,6 +25,7 @@ use crate::camera::{AppCameraParams, AppCameraPlugin, CameraParams};
 use crate::config::Config;
 use crate::diagnostics::DiagnosticsPlugin;
 use crate::params::ParamsPlugin;
+use crate::remote::AppRemotePlugin;
 use crate::state::ingame::animation::AdditionalPlayers;
 use crate::state::{AppState, Scenes, hangar, ingame};
 
@@ -35,6 +36,7 @@ mod diagnostics;
 mod environment;
 mod follow;
 mod params;
+mod remote;
 mod state;
 mod utils;
 
@@ -77,6 +79,8 @@ fn main() {
         camera_params
     };
 
+    let remote_plugin = AppRemotePlugin::new(&config.remote);
+
     let mut app = App::new();
 
     if let Some(ambient_light) = config.environment.ambient.to_ambient_light() {
@@ -98,6 +102,7 @@ fn main() {
             DiagnosticsPlugin,
             AppCameraPlugin,
             ParamsPlugin,
+            remote_plugin,
         ))
         .init_state::<AppState>()
         .add_systems(Startup, (setup, environment::setup))

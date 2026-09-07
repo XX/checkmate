@@ -11,7 +11,7 @@ opt-level = 1
 
 
 [dependencies]
-bevy = { version = "0.19", features = ["serialize", "jpeg", "tga"] }
+bevy = { version = "0.19", features = ["bevy_remote", "serialize", "jpeg", "tga"] }
 bevy-inspector-egui = "0.37"
 bevy_obj = "0.19"
 bevy_perf_ui = "0.7" # https://github.com/IyesGames/iyes_perf_ui

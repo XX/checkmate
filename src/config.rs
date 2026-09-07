@@ -1,3 +1,4 @@
+use std::net::IpAddr;
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 
@@ -9,6 +10,7 @@ use bevy::light::{GlobalAmbientLight, SunDisk};
 use bevy::math::{Quat, Vec3};
 use bevy::post_process::auto_exposure::AutoExposure;
 use bevy::post_process::bloom::Bloom;
+use bevy::remote::http::{DEFAULT_ADDR, DEFAULT_PORT};
 use config_load::config::builder::DefaultState;
 use config_load::config::{ConfigBuilder, Environment};
 use config_load::{ConfigLoader, FileLocation, Load};
@@ -685,6 +687,40 @@ impl CameraFollowSettings {
     }
 }
 
+/// Настройки внешнего API изменения параметров игры (см. [`crate::remote`]).
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct RemoteSettings {
+    #[serde(default)]
+    pub enabled: bool,
+
+    #[serde(default = "RemoteSettings::default_address")]
+    pub address: IpAddr,
+
+    #[serde(default = "RemoteSettings::default_port")]
+    pub port: u16,
+}
+
+impl Default for RemoteSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            address: Self::default_address(),
+            port: Self::default_port(),
+        }
+    }
+}
+
+impl RemoteSettings {
+    pub const fn default_address() -> IpAddr {
+        DEFAULT_ADDR
+    }
+
+    pub const fn default_port() -> u16 {
+        DEFAULT_PORT
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct LoggerSettings {
@@ -734,6 +770,9 @@ pub struct Config {
 
     #[serde(default)]
     pub camera: CameraSettings,
+
+    #[serde(default)]
+    pub remote: RemoteSettings,
 
     #[serde(default)]
     pub log: LoggerSettings,
