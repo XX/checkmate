@@ -17,6 +17,7 @@ use bevy::ecs::schedule::{IntoScheduleConfigs, SystemSet};
 use crate::camera::panorbit::{PanOrbitCamera, PanOrbitCameraTarget};
 use crate::camera::simple::SimpleCamera;
 use crate::camera::{self, CameraParams};
+use crate::config::JetFireKind;
 use crate::environment::{self, AmbientParams, Sun, SunParams};
 use crate::follow::{Followee, Follower, PreviousTransform};
 use crate::state::ingame::aircraft::{Aircraft, AircraftParams, Movement, Thrust, ThrustParams};
@@ -38,6 +39,7 @@ impl Plugin for ParamsPlugin {
             .register_type::<AmbientParams>()
             .register_type::<CameraParams>()
             .register_type::<FlickeringParams>()
+            .register_type::<JetFireKind>()
             .register_type::<JetFireParams>()
             .register_type::<SunParams>()
             .register_type::<TerrainParams>()

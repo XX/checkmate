@@ -10,6 +10,7 @@ use bevy::light::light_consts::lux;
 use bevy::math::{Quat, Vec3};
 use bevy::post_process::auto_exposure::AutoExposure;
 use bevy::post_process::bloom::Bloom;
+use bevy::reflect::Reflect;
 use bevy::remote::http::{DEFAULT_ADDR, DEFAULT_PORT};
 use config_load::config::builder::DefaultState;
 use config_load::config::{ConfigBuilder, Environment};
@@ -210,6 +211,27 @@ pub struct JetFireSettings {
     #[serde(default = "JetFireSettings::default_position")]
     pub position: [f32; 3],
 
+    /// Каким источником светит пламя.
+    #[serde(default)]
+    pub kind: JetFireKind,
+
+    /// Половина угла раствора конуса света, в радианах. Только для [`JetFireKind::Spot`].
+    ///
+    /// Пламя светит назад по оси сопла, а не во все стороны.
+    /// Значение чуть меньше `PI / 2` даёт заднюю полусферу — это и есть геометрия сопла.
+    #[serde(default = "JetFireSettings::default_outer_angle")]
+    pub outer_angle: f32,
+
+    /// Угол, внутри которого свет не ослабевает, в радианах. Только для [`JetFireKind::Spot`].
+    ///
+    /// От него до [`Self::outer_angle`] яркость спадает к нулю, давая мягкий край конуса.
+    #[serde(default = "JetFireSettings::default_inner_angle")]
+    pub inner_angle: f32,
+
+    /// Отбрасывать ли тени от пламени сопла.
+    #[serde(default = "JetFireSettings::default_shadows_enabled")]
+    pub shadows_enabled: bool,
+
     #[serde(default)]
     pub flickering: FlickeringSettings,
 }
@@ -222,6 +244,10 @@ impl Default for JetFireSettings {
             radius: Self::default_radius(),
             range: Self::default_range(),
             position: Self::default_position(),
+            kind: Default::default(),
+            outer_angle: Self::default_outer_angle(),
+            inner_angle: Self::default_inner_angle(),
+            shadows_enabled: Self::default_shadows_enabled(),
             flickering: Default::default(),
         }
     }
@@ -247,6 +273,31 @@ impl JetFireSettings {
     pub const fn default_position() -> [f32; 3] {
         [0.0, 0.0, -5.5]
     }
+
+    /// Чуть меньше `PI / 2`: ровно половина сферы, направленная назад.
+    pub const fn default_outer_angle() -> f32 {
+        1.5
+    }
+
+    pub const fn default_inner_angle() -> f32 {
+        1.2
+    }
+
+    pub const fn default_shadows_enabled() -> bool {
+        true
+    }
+}
+
+/// Тип источника света у пламени сопла.
+#[derive(Copy, Clone, Debug, Default, Deserialize, PartialEq, Reflect, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JetFireKind {
+    /// Конус, направленный назад по оси сопла.
+    #[default]
+    Spot,
+
+    /// Всенаправленный источник.
+    Point,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

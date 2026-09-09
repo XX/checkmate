@@ -12,6 +12,8 @@ use bevy::light::atmosphere::ScatteringMedium;
 use bevy::light::{Atmosphere, DirectionalLightShadowMap};
 use bevy::pbr::AtmosphereSettings;
 use bevy::prelude::Entity;
+use bevy::render::RenderPlugin;
+use bevy::render::settings::{InstanceFlags, RenderCreation, WgpuSettings};
 use bevy::state::app::AppExtStates;
 use bevy::state::condition::in_state;
 use bevy::state::state::{NextState, OnEnter, OnExit};
@@ -100,7 +102,13 @@ fn main() {
         .insert_resource(Scenes::default())
         .add_plugins((
             // Распространение трансформов берёт на себя `BigWorldPlugin`, см. `crate::world`.
-            DefaultPlugins.build().disable::<TransformPlugin>(),
+            DefaultPlugins.build().disable::<TransformPlugin>().set(RenderPlugin {
+                render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
+                    instance_flags: gpu_validation_flags(),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }),
             EguiPlugin::default(),
             WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Backquote)),
             ObjPlugin,
@@ -157,6 +165,17 @@ fn main() {
         )
         .add_systems(Update, close_on_esc)
         .run();
+}
+
+/// Флаги wgpu без проверок графического API по-умолчанию.
+fn gpu_validation_flags() -> InstanceFlags {
+    let mut flags = InstanceFlags::default();
+
+    // Проверки выключены по умолчанию
+    flags.remove(InstanceFlags::VALIDATION | InstanceFlags::GPU_BASED_VALIDATION);
+
+    // Проверки включаются переменной окружения: `WGPU_VALIDATION=1 cargo run`
+    flags.with_env()
 }
 
 fn setup(
