@@ -1,11 +1,12 @@
 use bevy::animation::AnimationPlayer;
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::ecs::entity::Entity;
+use bevy::ecs::hierarchy::ChildOf;
 use bevy::ecs::name::Name;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Commands, Res, ResMut};
 use bevy::gltf::GltfAssetLabel;
-use bevy::math::Vec3;
+use bevy::math::DVec3;
 use bevy::mesh::Mesh;
 use bevy::pbr::StandardMaterial;
 use bevy::transform::components::Transform;
@@ -17,6 +18,7 @@ use crate::follow::{Followee, PreviousTransform};
 use crate::state::ingame::aircraft::{Aircraft, AircraftParams, Movement, Thrust, ThrustParams};
 use crate::state::ingame::animation::{AdditionalPlayers, attach_animations};
 use crate::state::{SceneKey, Scenes};
+use crate::world::BigWorld;
 
 pub mod aircraft;
 pub mod animation;
@@ -34,10 +36,15 @@ pub fn setup(
     mut commands: Commands,
     config: Res<Config>,
     asset_server: Res<AssetServer>,
+    world: BigWorld,
     mut scenes: ResMut<Scenes>,
     camera: Res<AppCameraEntity>,
     mut camera_params: ResMut<AppCameraParams>,
 ) {
+    let Some((root, grid)) = world.get() else {
+        return;
+    };
+
     let scene = scenes
         .game
         .entry(SceneKey::Aircraft)
@@ -47,7 +54,8 @@ pub fn setup(
         .clone();
 
     let altitude = config.game.flight_altitude;
-    let transform = Transform::from_translation(Vec3::ZERO.with_y(altitude));
+    let (cell, translation) = grid.translation_to_grid(DVec3::new(0.0, altitude as f64, 0.0));
+    let transform = Transform::from_translation(translation);
     let entity_id = commands
         .spawn((
             Aircraft,
@@ -57,7 +65,9 @@ pub fn setup(
             Movement::default(),
             Followee,
             WorldAssetRoot(scene),
-            PreviousTransform(transform.clone()),
+            ChildOf(root),
+            cell,
+            PreviousTransform::new(cell, &transform),
             transform,
         ))
         .id();
@@ -100,7 +110,14 @@ pub fn setup(
     });
 
     camera_params.follower.followee = Some(entity_id);
-    camera::respawn_panorbit(commands, camera_params, camera.entity_id, &config.camera, altitude);
+    camera::respawn_panorbit(
+        &mut commands,
+        &mut camera_params,
+        &world,
+        camera.entity_id,
+        &config.camera,
+        altitude,
+    );
 }
 
 pub fn cleanup(

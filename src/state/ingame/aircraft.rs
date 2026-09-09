@@ -100,7 +100,7 @@ impl Thrust {
     pub fn new() -> Self {
         Self {
             current: 0.0,
-            target: 20.0,
+            target: 0.8,
         }
     }
 }

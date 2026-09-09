@@ -290,8 +290,9 @@ pub struct TerrainSettings {
     #[serde(default)]
     pub model: String,
 
+    /// Положение в мире, в метрах.
     #[serde(default)]
-    pub position: [f32; 3],
+    pub position: [f64; 3],
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotation: Option<Rotation>,

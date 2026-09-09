@@ -14,13 +14,17 @@ use bevy::time::Time;
 use bevy::transform::components::Transform;
 use bevy::window::Window;
 use bevy_inspector_egui::bevy_egui::EguiContexts;
+use big_space::prelude::{CellCoord, Grid};
 
 use crate::camera::LookingAt;
+use crate::world::{BigWorld, CellPoint};
 
 #[derive(Component, Reflect, Clone, Debug)]
 #[reflect(Component, Default)]
 pub struct PanOrbitCameraTarget {
-    pub focus: Vec3,
+    /// Точка, вокруг которой вращается камера.
+    pub focus: CellPoint,
+
     pub radius: f32,
     pub rotation: Quat,
 }
@@ -28,7 +32,7 @@ pub struct PanOrbitCameraTarget {
 impl Default for PanOrbitCameraTarget {
     fn default() -> Self {
         PanOrbitCameraTarget {
-            focus: Vec3::ZERO,
+            focus: CellPoint::default(),
             radius: 5.0,
             rotation: Quat::IDENTITY,
         }
@@ -36,16 +40,27 @@ impl Default for PanOrbitCameraTarget {
 }
 
 impl PanOrbitCameraTarget {
-    pub fn new(position: Vec3, look_at: LookingAt) -> Self {
-        let focus = look_at.target;
-        let radius = (position - focus).length();
-        let transform = Transform::from_translation(position).looking_at(look_at.target, look_at.up);
+    pub fn new(grid: &Grid, position: Vec3, look_at: LookingAt) -> Self {
+        let (radius, rotation) = Self::orbit(position, look_at);
 
         PanOrbitCameraTarget {
-            focus,
+            focus: CellPoint::from_position(grid, look_at.target.as_dvec3()),
             radius,
-            rotation: transform.rotation,
+            rotation,
         }
+    }
+
+    /// Радиус и поворот орбиты по паре «позиция камеры — точка взгляда».
+    ///
+    /// Обе точки задаются относительно фокуса, поэтому остаются небольшими и в `f32`
+    /// представимы точно.
+    pub fn orbit(position: Vec3, look_at: LookingAt) -> (f32, Quat) {
+        let radius = (position - look_at.target).length();
+        let rotation = Transform::from_translation(position)
+            .looking_at(look_at.target, look_at.up)
+            .rotation;
+
+        (radius, rotation)
     }
 }
 
@@ -53,7 +68,7 @@ impl PanOrbitCameraTarget {
 #[reflect(Component, Default)]
 pub struct PanOrbitCamera {
     /// The "focus point" to orbit around. It is automatically updated when panning the camera
-    pub focus: Vec3,
+    pub focus: CellPoint,
     pub radius: f32,
     pub upside_down: bool,
     pub smoothness_speed: f32,
@@ -65,7 +80,7 @@ pub struct PanOrbitCamera {
 impl Default for PanOrbitCamera {
     fn default() -> Self {
         Self {
-            focus: Vec3::ZERO,
+            focus: CellPoint::default(),
             radius: 5.0,
             upside_down: false,
             smoothness_speed: 8.0,
@@ -77,9 +92,16 @@ impl Default for PanOrbitCamera {
 }
 
 impl PanOrbitCamera {
-    pub fn update_position(&self, transform: &mut Transform) {
+    /// Переносит камеру на орбиту вокруг фокуса.
+    ///
+    /// Ячейка и смещение задаются вместе и согласованно, поэтому перецентровка `big_space`
+    /// (она срабатывает, если смещение вышло за пределы ячейки) ничего не ломает: следующий
+    /// кадр всё равно пересчитает позицию от фокуса, а не от текущего трансформа.
+    pub fn update_position(&self, transform: &mut Transform, cell: &mut CellCoord) {
         let rot_matrix = Mat3::from_quat(transform.rotation);
-        transform.translation = self.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, self.radius));
+
+        *cell = self.focus.cell;
+        transform.translation = self.focus.offset + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, self.radius));
     }
 }
 
@@ -88,9 +110,13 @@ pub fn update_input(
     mut motion_events: MessageReader<MouseMotion>,
     mut scroll_events: MessageReader<MouseWheel>,
     input_mouse: Res<ButtonInput<MouseButton>>,
+    world: BigWorld,
     mut query: Query<(&mut PanOrbitCamera, &mut PanOrbitCameraTarget, &Transform, &Projection)>,
 ) {
     let primary_window = windows.single().expect("Window must be single");
+    let Some(grid) = world.grid() else {
+        return;
+    };
 
     for (mut camera, mut target, transform, projection) in query.iter_mut() {
         if !camera.mouse_control_enabled {
@@ -152,7 +178,7 @@ pub fn update_input(
             // make panning proportional to distance away from focus point
             let translation = (right + up) * camera.radius;
 
-            target.focus += translation;
+            target.focus.translate(grid, translation);
         } else if scroll.abs() > 0.0 {
             target.radius -= scroll * target.radius * 0.2;
             // dont allow zoom to reach zero or you get stuck
@@ -167,19 +193,33 @@ pub fn update_input(
 
 pub fn interpolate_camera(
     time: Res<Time>,
-    mut query: Query<(&mut PanOrbitCamera, &PanOrbitCameraTarget, &mut Transform)>,
+    world: BigWorld,
+    mut query: Query<(
+        &mut PanOrbitCamera,
+        &PanOrbitCameraTarget,
+        &mut Transform,
+        &mut CellCoord,
+    )>,
 ) {
-    for (mut camera, target, mut transform) in query.iter_mut() {
+    let Some(grid) = world.grid() else {
+        return;
+    };
+
+    for (mut camera, target, mut transform, mut cell) in query.iter_mut() {
         let lerp_factor = 1.0 - (-camera.smoothness_speed * time.delta_secs()).exp();
 
         // Update camera params
-        camera.focus = camera.focus.lerp(target.focus, lerp_factor);
+        // Интерполяция идёт по разности точек, а не по их абсолютным координатам: остаток
+        // сглаживания на сотнях километров меньше шага `f32` и в лобовом `lerp` просто
+        // терялся бы, превращая плавное движение в ступеньки.
+        let delta_focus = target.focus.delta_from(grid, &camera.focus);
+        camera.focus.translate(grid, delta_focus * lerp_factor);
         camera.radius += (target.radius - camera.radius) * lerp_factor;
 
         // Interpolate rotation
         transform.rotation = transform.rotation.slerp(target.rotation, lerp_factor);
 
-        camera.update_position(&mut transform);
+        camera.update_position(&mut transform, &mut cell);
     }
 }
 

@@ -1,6 +1,7 @@
 use bevy::color::Color;
 use bevy::ecs::change_detection::DetectChanges;
 use bevy::ecs::component::Component;
+use bevy::ecs::hierarchy::ChildOf;
 use bevy::ecs::name::Name;
 use bevy::ecs::query::Changed;
 use bevy::ecs::reflect::{ReflectComponent, ReflectResource};
@@ -12,8 +13,10 @@ use bevy::prelude::default;
 use bevy::reflect::Reflect;
 use bevy::reflect::std_traits::ReflectDefault;
 use bevy::transform::components::Transform;
+use big_space::prelude::{CellCoord, Grid};
 
 use crate::config::{AmbientSettings, Config, SunSettings, color_from_array, color_to_array};
+use crate::world::BigWorld;
 
 #[derive(Component, Reflect, Debug, Default, Clone, Copy)]
 #[reflect(Component, Default)]
@@ -81,13 +84,27 @@ impl SunParams {
         }
     }
 
-    pub fn transform(&self) -> Transform {
-        Transform::from_translation(self.position).looking_at(self.target, Vec3::Y)
+    /// Раскладывает положение солнца на ячейку сетки и трансформ внутри неё.
+    ///
+    /// Направление света берётся от исходной пары «позиция — цель», а не от их значений
+    /// внутри ячейки: для [`DirectionalLight`] физический смысл имеет только поворот,
+    /// и он не должен зависеть от того, в какую ячейку попала сущность.
+    pub fn cell_transform(&self, grid: &Grid) -> (CellCoord, Transform) {
+        let (cell, translation) = grid.imprecise_translation_to_grid(self.position);
+        let direction = self.target - self.position;
+        let transform = Transform::from_translation(translation).looking_at(translation + direction, Vec3::Y);
+
+        (cell, transform)
     }
 }
 
-pub fn setup(mut commands: Commands, config: Res<Config>) {
+pub fn setup(mut commands: Commands, config: Res<Config>, world: BigWorld) {
+    let Some((root, grid)) = world.get() else {
+        return;
+    };
+
     let params = SunParams::from(&config.environment.sun);
+    let (cell, transform) = params.cell_transform(grid);
 
     commands.spawn((
         Name::new("Sun"),
@@ -95,17 +112,36 @@ pub fn setup(mut commands: Commands, config: Res<Config>) {
         params,
         params.directional_light(),
         params.sun_disk(),
-        params.transform(),
+        ChildOf(root),
+        cell,
+        transform,
     ));
 }
 
 pub fn apply_sun(
-    mut query: Query<(&SunParams, &mut DirectionalLight, &mut SunDisk, &mut Transform), Changed<SunParams>>,
+    world: BigWorld,
+    mut query: Query<
+        (
+            &SunParams,
+            &mut DirectionalLight,
+            &mut SunDisk,
+            &mut CellCoord,
+            &mut Transform,
+        ),
+        Changed<SunParams>,
+    >,
 ) {
-    for (params, mut light, mut sun_disk, mut transform) in &mut query {
+    let Some(grid) = world.grid() else {
+        return;
+    };
+
+    for (params, mut light, mut sun_disk, mut cell, mut transform) in &mut query {
+        let (new_cell, new_transform) = params.cell_transform(grid);
+
         *light = params.directional_light();
         *sun_disk = params.sun_disk();
-        *transform = params.transform();
+        *cell = new_cell;
+        *transform = new_transform;
     }
 }
 

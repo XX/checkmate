@@ -1,10 +1,11 @@
-use bevy::app::{App, Plugin, Startup, Update};
+use bevy::app::{App, Plugin, PostUpdate, Startup, Update};
 use bevy::asset::Assets;
 use bevy::camera::{Camera, Camera3d, ClearColorConfig, Exposure, PerspectiveProjection, Projection};
 use bevy::color::Color;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::ecs::change_detection::DetectChanges;
 use bevy::ecs::entity::Entity;
+use bevy::ecs::hierarchy::ChildOf;
 use bevy::ecs::name::Name;
 use bevy::ecs::query::{With, Without};
 use bevy::ecs::reflect::ReflectResource;
@@ -15,20 +16,26 @@ use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::light::Atmosphere;
 use bevy::light::atmosphere::ScatteringMedium;
-use bevy::math::{Dir3, Vec3};
+use bevy::math::{DVec3, Dir3, Quat, Vec3};
 use bevy::pbr::{AtmosphereMode, AtmosphereSettings};
 use bevy::post_process::auto_exposure::{AutoExposure, AutoExposurePlugin};
 use bevy::post_process::bloom::Bloom;
 use bevy::reflect::Reflect;
+use bevy::transform::TransformSystems;
 use bevy::transform::components::Transform;
 use bevy_inspector_egui::bevy_egui::PrimaryEguiContext;
+use big_space::prelude::{CellCoord, FloatingOrigin, Grid};
 
 use crate::camera::panorbit::{PanOrbitCamera, PanOrbitCameraTarget};
 use crate::config::{CameraSettings, Config};
 use crate::follow::{Followee, Follower, PreviousTransform};
+use crate::world::{BigWorld, CellPoint};
 
 pub mod panorbit;
 pub mod simple;
+
+/// Корень мира создаётся в `PreStartup`, то есть раньше любой системы, которая наполняет сцену.
+const WORLD_ROOT_EXPECTED: &str = "world root must be spawned in PreStartup";
 
 #[derive(Clone, Copy, Debug)]
 pub struct LookingAt {
@@ -240,30 +247,98 @@ impl Plugin for AppCameraPlugin {
 
         app.add_systems(Startup, (spawn_atmosphere, spawn_panorbit))
             .add_systems(Update, (panorbit::update_input, panorbit::interpolate_camera).chain())
-            .add_systems(Update, panorbit::block_camera_mouse_control_when_hovering_ui);
+            .add_systems(Update, panorbit::block_camera_mouse_control_when_hovering_ui)
+            // Центр планеты должен встать под камеру до того, как посчитаются
+            // `GlobalTransform`, иначе атмосфера отстаёт от камеры на кадр.
+            .add_systems(PostUpdate, follow_atmosphere.before(TransformSystems::Propagate));
     }
 }
 
 pub fn spawn_atmosphere(
     mut commands: Commands,
     params: Res<AppCameraParams>,
+    world: BigWorld,
     mut scattering_mediums: ResMut<Assets<ScatteringMedium>>,
 ) {
     let Some((mut atmosphere, medium, _)) = params.atmosphere.clone() else {
         return;
     };
+    let (root, grid) = world.get().expect(WORLD_ROOT_EXPECTED);
     atmosphere.medium = scattering_mediums.add(medium);
+
+    // Радиус планеты — 6.36e6 м: в `f32` такая координата представима с точностью 0.5 м,
+    // поэтому центр раскладывается на ячейку и смещение, как и всё остальное в мире.
+    let center = CellPoint::from_position(grid, DVec3::NEG_Y * atmosphere.inner_radius as f64);
 
     commands.spawn((
         Name::new("Atmosphere"),
-        Transform::from_translation(Vec3::NEG_Y * atmosphere.inner_radius),
+        ChildOf(root),
+        center.cell,
+        Transform::from_translation(center.offset),
         atmosphere,
     ));
 }
 
-pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
-    let target = PanOrbitCameraTarget::new(params.position, params.look_at);
-    let transform = Transform::from_translation(params.position).with_rotation(target.rotation);
+/// Держит центр планеты под камерой.
+///
+/// Атмосфера в bevy — сфера с центром в `GlobalTransform` своей сущности, а мир в игре плоский.
+/// Без поправки плоскость расходится со сферой на d²/2R: 786 м на 100 км от старта и 7.1 км
+/// на 300 км, то есть в дальнем конце маршрута небо темнело бы, как на большой высоте.
+/// Перенос центра под камеру оставляет высоту над атмосферой равной высоте над ландшафтом.
+/// Честная альтернатива — настоящая кривизна Земли, она отдельным пунктом в бэклоге.
+pub fn follow_atmosphere(
+    world: BigWorld,
+    origin: Query<(&CellCoord, &Transform), With<FloatingOrigin>>,
+    mut atmospheres: Query<(&Atmosphere, &mut CellCoord, &mut Transform), Without<FloatingOrigin>>,
+) {
+    let Some(grid) = world.grid() else {
+        return;
+    };
+    let Ok((origin_cell, origin_transform)) = origin.single() else {
+        return;
+    };
+
+    let origin_position = CellPoint::new(*origin_cell, origin_transform.translation).position(grid);
+
+    for (atmosphere, mut cell, mut transform) in &mut atmospheres {
+        let center = CellPoint::from_position(
+            grid,
+            DVec3::new(origin_position.x, -(atmosphere.inner_radius as f64), origin_position.z),
+        );
+
+        // Присваивание через сравнение: пока камера стоит, атмосфера не должна дёргать
+        // change detection и пересчёт таблиц рассеяния.
+        if *cell != center.cell {
+            *cell = center.cell;
+        }
+        if transform.translation != center.offset {
+            transform.translation = center.offset;
+        }
+    }
+}
+
+pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>, world: BigWorld) {
+    let (root, grid) = world.get().expect(WORLD_ROOT_EXPECTED);
+
+    spawn_camera(&mut commands, &params, root, grid);
+}
+
+/// Создаёт камеру в мире с плавающим началом координат.
+///
+/// Камера — потомок корневого `BigSpace` и носитель [`FloatingOrigin`]: `GlobalTransform`
+/// всех сущностей мира считается относительно её ячейки, поэтому ошибка `f32` при рендере
+/// всегда мала рядом с камерой, куда бы она ни улетела.
+fn spawn_camera(commands: &mut Commands, params: &AppCameraParams, root: Entity, grid: &Grid) {
+    let target = PanOrbitCameraTarget::new(grid, params.position, params.look_at);
+    let camera = PanOrbitCamera {
+        radius: target.radius,
+        focus: target.focus,
+        ..Default::default()
+    };
+
+    let mut cell = CellCoord::default();
+    let mut transform = Transform::from_rotation(target.rotation);
+    camera.update_position(&mut transform, &mut cell);
 
     let mut entity = commands.spawn((
         Camera3d::default(),
@@ -275,13 +350,12 @@ pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
             fov: 45.0_f32.to_radians(),
             ..Default::default()
         }),
-        PanOrbitCamera {
-            radius: target.radius,
-            focus: target.focus,
-            ..Default::default()
-        },
+        camera,
         PrimaryEguiContext,
         target,
+        ChildOf(root),
+        FloatingOrigin,
+        cell,
         transform,
         params.follower,
         // The directional light illuminance used in this scene
@@ -309,12 +383,17 @@ pub fn spawn_panorbit(mut commands: Commands, params: Res<AppCameraParams>) {
 }
 
 pub fn respawn_panorbit(
-    mut commands: Commands,
-    mut params: ResMut<AppCameraParams>,
+    commands: &mut Commands,
+    params: &mut AppCameraParams,
+    world: &BigWorld,
     camera: Entity,
     settings: &CameraSettings,
     height: f32,
 ) {
+    let Some((root, grid)) = world.get() else {
+        return;
+    };
+
     commands.entity(camera).despawn();
 
     let (position, target) = if let Some(preset) = settings.presets.first() {
@@ -335,13 +414,14 @@ pub fn respawn_panorbit(
     params.position = position;
     params.look_at.target = target;
 
-    spawn_panorbit(commands, params.into());
+    spawn_camera(commands, params, root, grid);
 }
 
 pub fn preset_toggle(
     config: Res<Config>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    followee_query: Query<&Transform, With<Followee>>,
+    world: BigWorld,
+    followee_query: Query<(&CellCoord, &Transform), With<Followee>>,
     mut camera_query: Query<(&mut PanOrbitCameraTarget, &Follower), With<PanOrbitCamera>>,
 ) {
     if keyboard_input.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
@@ -363,22 +443,26 @@ pub fn preset_toggle(
         }
 
         if let Some(preset) = preset_idx.and_then(|idx| config.camera.presets.get(idx))
+            && let Some(grid) = world.grid()
             && let Some((mut camera_target, follower)) = camera_query.iter_mut().next()
         {
             let (position, target) = preset.to_vec3s();
+            let (radius, rotation) = PanOrbitCameraTarget::orbit(position, LookingAt { target, up: Dir3::Y });
 
-            let additional_transform = follower
+            // Пресет задаёт орбиту относительно цели слежения: точка взгляда прибавляется
+            // к её положению, поворот — к её повороту. Без цели точкой отсчёта остаётся
+            // текущий фокус камеры.
+            let (mut focus, delta_rotation) = follower
                 .followee
                 .and_then(|followee_entity| followee_query.get(followee_entity).ok())
-                .map(|followe_transform| followe_transform.clone())
-                .unwrap_or(Transform::from_translation(camera_target.focus));
+                .map(|(cell, transform)| (CellPoint::new(*cell, transform.translation), transform.rotation))
+                .unwrap_or((camera_target.focus, Quat::IDENTITY));
 
-            let mut target = PanOrbitCameraTarget::new(position, LookingAt { target, up: Dir3::Y });
+            focus.translate(grid, target);
 
-            let delta_rotation = additional_transform.rotation;
-            target.rotation = delta_rotation * target.rotation;
-            target.focus += additional_transform.translation;
-            *camera_target = target;
+            camera_target.focus = focus;
+            camera_target.radius = radius;
+            camera_target.rotation = delta_rotation * rotation;
         }
     }
 }
@@ -406,29 +490,41 @@ pub fn follow_toggle(
 }
 
 pub fn follow_move(
-    followee_query: Query<(&Transform, &PreviousTransform), With<Followee>>,
+    world: BigWorld,
+    followee_query: Query<(&CellCoord, &Transform, &PreviousTransform), With<Followee>>,
     mut follower_query: Query<
         (
             &mut PanOrbitCamera,
             &mut PanOrbitCameraTarget,
             &mut Transform,
+            &mut CellCoord,
             &Follower,
         ),
         Without<Followee>,
     >,
 ) {
-    for (mut camera, mut target, mut transform, follower) in &mut follower_query {
+    let Some(grid) = world.grid() else {
+        return;
+    };
+
+    for (mut camera, mut target, mut transform, mut cell, follower) in &mut follower_query {
         if let Some(target_entity) = follower.followee {
-            if let Ok((followee_transform, followee_prev_transform)) = followee_query.get(target_entity) {
+            if let Ok((followee_cell, followee_transform, followee_prev_transform)) = followee_query.get(target_entity)
+            {
                 if follower.turn_towards {
-                    let delta_rotation = followee_transform.rotation * followee_prev_transform.0.rotation.inverse();
+                    let delta_rotation = followee_transform.rotation * followee_prev_transform.rotation.inverse();
                     target.rotation = delta_rotation * target.rotation;
                 }
 
-                let delta_focus = followee_transform.translation - followee_prev_transform.0.translation;
-                target.focus += delta_focus;
-                camera.focus += delta_focus;
-                camera.update_position(&mut transform);
+                // Разность абсолютных координат здесь была бы катастрофическим сокращением:
+                // на 300 км шаг `f32` — 15 мм при кадровом шаге порядка метра. Дельта по
+                // ячейкам и смещениям точна на любом удалении и не врёт на границе ячейки.
+                let followee_point = CellPoint::new(*followee_cell, followee_transform.translation);
+                let delta_focus = followee_point.delta_from(grid, &followee_prev_transform.point);
+
+                target.focus.translate(grid, delta_focus);
+                camera.focus.translate(grid, delta_focus);
+                camera.update_position(&mut transform, &mut cell);
             }
         }
     }

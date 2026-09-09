@@ -72,7 +72,7 @@ use std::path::PathBuf;
 use bevy::app::{App, Plugin};
 use bevy::ecs::system::In;
 use bevy::ecs::world::World;
-use bevy::log::warn;
+use bevy::log;
 use bevy::remote::http::RemoteHttpPlugin;
 use bevy::remote::{BrpError, BrpResult, RemotePlugin};
 use serde::{Deserialize, Serialize};
@@ -109,7 +109,7 @@ impl Plugin for AppRemotePlugin {
             RemoteHttpPlugin::default().with_address(address).with_port(port),
         ));
 
-        warn!("remote params API is enabled and listening on http://{address}:{port}");
+        log::warn!("remote params API is enabled and listening on http://{address}:{port}");
     }
 }
 

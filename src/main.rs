@@ -1,5 +1,5 @@
 use bevy::DefaultPlugins;
-use bevy::app::{App, Startup, Update};
+use bevy::app::{App, PluginGroup, Startup, Update};
 use bevy::camera::{ClearColorConfig, Exposure};
 use bevy::color::Color;
 use bevy::ecs::schedule::IntoScheduleConfigs;
@@ -15,6 +15,7 @@ use bevy::prelude::Entity;
 use bevy::state::app::AppExtStates;
 use bevy::state::condition::in_state;
 use bevy::state::state::{NextState, OnEnter, OnExit};
+use bevy::transform::TransformPlugin;
 use bevy::window::Window;
 use bevy_inspector_egui::bevy_egui::{EguiGlobalSettings, EguiPlugin};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -30,6 +31,7 @@ use crate::remote::AppRemotePlugin;
 use crate::save::SaveConfigPlugin;
 use crate::state::ingame::animation::AdditionalPlayers;
 use crate::state::{AppState, Scenes, hangar, ingame};
+use crate::world::BigWorldPlugin;
 
 mod camera;
 mod cli;
@@ -42,6 +44,7 @@ mod remote;
 mod save;
 mod state;
 mod utils;
+mod world;
 
 fn main() {
     let opts: cli::Opts = cli::Opts::parse();
@@ -49,6 +52,7 @@ fn main() {
         eprintln!("WARNING: config load error: {err}, use default config");
         Config::default()
     });
+    println!("{config:?}");
 
     let camera_params = AppCameraParams::default()
         .with_smoothness_speed(config.camera.smoothness_speed)
@@ -95,11 +99,13 @@ fn main() {
         .insert_resource(config)
         .insert_resource(Scenes::default())
         .add_plugins((
-            DefaultPlugins,
+            // Распространение трансформов берёт на себя `BigWorldPlugin`, см. `crate::world`.
+            DefaultPlugins.build().disable::<TransformPlugin>(),
             EguiPlugin::default(),
             WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Backquote)),
             ObjPlugin,
             DiagnosticsPlugin,
+            BigWorldPlugin,
             AppCameraPlugin,
             ParamsPlugin,
             SaveConfigPlugin,

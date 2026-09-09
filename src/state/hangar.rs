@@ -2,6 +2,7 @@ use bevy::animation::graph::{AnimationGraphHandle, AnimationNodeIndex, Animation
 use bevy::animation::{AnimationClip, AnimationPlayer};
 use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::color::{Color, ColorToComponents, LinearRgba};
+use bevy::ecs::hierarchy::ChildOf;
 use bevy::ecs::observer::On;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::system::{Commands, Local, Query, Res, ResMut};
@@ -15,12 +16,14 @@ use bevy::pbr::{MeshMaterial3d, StandardMaterial};
 use bevy::prelude::{AnimationGraph, Entity, MeshBuilder};
 use bevy::transform::components::Transform;
 use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
+use big_space::prelude::CellCoord;
 
 use crate::camera;
 use crate::camera::{AppCameraEntity, AppCameraParams};
 use crate::config::Config;
 use crate::state::{SceneKey, Scenes};
 use crate::utils::combine_meshes;
+use crate::world::BigWorld;
 
 #[derive(Resource)]
 pub struct HangarData {
@@ -33,10 +36,15 @@ pub fn setup(
     mut commands: Commands,
     config: Res<Config>,
     asset_server: Res<AssetServer>,
+    world: BigWorld,
     mut scenes: ResMut<Scenes>,
     camera: Res<AppCameraEntity>,
-    camera_params: ResMut<AppCameraParams>,
+    mut camera_params: ResMut<AppCameraParams>,
 ) {
+    let Some(root) = world.root() else {
+        return;
+    };
+
     let scene = scenes
         .hangar
         .entry(SceneKey::Aircraft)
@@ -47,6 +55,8 @@ pub fn setup(
     let entity_id = commands
         .spawn((
             WorldAssetRoot(scene),
+            ChildOf(root),
+            CellCoord::default(),
             Transform::from_translation(Vec3::ZERO.with_y(height)),
         ))
         .observe(attach_animations)
@@ -59,8 +69,9 @@ pub fn setup(
     });
 
     camera::respawn_panorbit(
-        commands,
-        camera_params,
+        &mut commands,
+        &mut camera_params,
+        &world,
         camera.entity_id,
         &config.camera,
         height,
@@ -90,10 +101,15 @@ pub fn cleanup(
 
 pub fn chessboard_land_spawn(
     mut commands: Commands,
+    world: BigWorld,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut data: ResMut<HangarData>,
 ) {
+    let Some(root) = world.root() else {
+        return;
+    };
+
     let mut mesh_data = Vec::new();
     let cell_mesh = Plane3d::default().mesh().size(2.0, 2.0).build();
 
@@ -120,7 +136,12 @@ pub fn chessboard_land_spawn(
     let material = materials.add(Color::WHITE);
 
     let entity_id = commands
-        .spawn((Mesh3d(mesh.clone()), MeshMaterial3d(material.clone())))
+        .spawn((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(material.clone()),
+            ChildOf(root),
+            CellCoord::default(),
+        ))
         .id();
 
     data.entities.push(entity_id);
